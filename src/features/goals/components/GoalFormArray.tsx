@@ -43,7 +43,7 @@ export function GoalFormArray() {
 
           <Button
             type="button"
-            onClick={() => append(DEFAULT_GOAL)}
+            onClick={() => append({ ...DEFAULT_GOAL })}
           >
             <PlusCircle className="mr-2 h-4 w-4" />
             Add Your First Goal
@@ -57,7 +57,7 @@ export function GoalFormArray() {
             type="button"
             variant="outline"
             className="w-full max-w-sm border-dashed"
-            onClick={() => append(DEFAULT_GOAL)}
+            onClick={() => append({ ...DEFAULT_GOAL })}
             disabled={!canAddMore}
           >
             <PlusCircle className="mr-2 h-4 w-4" />

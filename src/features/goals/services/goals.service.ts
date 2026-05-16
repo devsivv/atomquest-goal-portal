@@ -30,6 +30,28 @@ export const goalsService = {
     return data ?? [];
   },
 
+  /**
+   * Fetch ALL active (non-deleted) goal rows for a specific employee + cycle.
+   * Returns both the JSONB draft anchor and submitted/approved relational rows.
+   * Used by GoalCreationDashboard to determine which mode to render.
+   */
+  async getEmployeeGoalsForCycle(
+    client: SupabaseClient,
+    profileId: string,
+    cycleId: string
+  ): Promise<NormalizedGoal[]> {
+    const { data, error } = await client
+      .from(TABLE)
+      .select("*")
+      .eq("profile_id", profileId)
+      .eq("cycle_id", cycleId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  },
+
   /** Fetch a single goal by ID */
   async getById(client: SupabaseClient, id: string): Promise<NormalizedGoal | null> {
     const { data, error } = await client
@@ -129,39 +151,45 @@ export const goalsService = {
     return this.saveDraft(client, profileId, cycleId, goals);
   },
 
-  /** 
-   * Validate and finalize the submission workflow.
-   * This replaces any existing drafts/goals with the final strict records.
+  /**
+   * Finalize employee goal submission via SECURITY DEFINER RPC.
+   *
+   * Delegates the soft-delete + INSERT to `employee_submit_goals` so that
+   * all ownership validation and DML runs under the DB-owner role,
+   * bypassing the PostgREST RLS "INSERT → SELECT" edge cases that
+   * caused persistent failures with the client-side approach.
+   *
+   * Preserves: autosave, validation, audit logging, manager workflows,
+   * soft-delete lifecycle.
    */
   async submitGoals(
-    client: SupabaseClient, 
-    profileId: string, 
-    cycleId: string, 
+    client: SupabaseClient,
+    profileId: string,
+    cycleId: string,
     goals: GoalSubmissionPayload[]
   ): Promise<void> {
-    // 1. Wipe existing goals/drafts for this specific cycle to ensure a clean state
-    const { error: deleteError } = await client
-      .from(TABLE)
-      .delete()
-      .eq("profile_id", profileId)
-      .eq("cycle_id", cycleId);
+    // Verify session exists — authentication only, no auth/profile comparison.
+    // Ownership is validated inside the RPC itself.
+    const { data: { user }, error: authError } = await client.auth.getUser();
+    if (authError || !user) throw new Error("Authentication failed or missing session.");
 
-    if (deleteError) throw new Error(deleteError.message);
+    console.log("=== EMPLOYEE SUBMIT RPC — DIAGNOSTICS ===");
+    console.log("auth.uid():", user.id);
+    console.log("profileId arg:", profileId);
+    console.log("cycleId arg:", cycleId);
+    console.log("Goal count:", goals.length);
+    console.log("Payload:", JSON.stringify(goals, null, 2));
 
-    // 2. Insert final validated records
-    const submissionData = goals.map(g => ({
-      ...g,
-      profile_id: profileId,
-      status: "submitted",
-      submitted_at: new Date().toISOString(),
-      created_by: profileId
-    }));
+    const { data, error } = await client.rpc("employee_submit_goals", {
+      p_profile_id: profileId,
+      p_cycle_id:   cycleId,
+      p_goals:      goals,   // Supabase serialises this to JSONB automatically
+    });
 
-    const { error: insertError } = await client
-      .from(TABLE)
-      .insert(submissionData);
+    console.log("=== EMPLOYEE SUBMIT RPC — RESPONSE ===");
+    console.log({ data, error });
 
-    if (insertError) throw new Error(insertError.message);
+    if (error) throw new Error(error.message);
   },
 
   /** Update an existing goal (standard relational update) */

@@ -5,6 +5,7 @@
 
 import type { BaseEntity } from "@/types";
 import type { GoalStatus, GoalUomType } from "./enums";
+import type { GoalReviewAction } from "./approval";
 
 /** 
  * Normalized Goal Entity 
@@ -30,7 +31,7 @@ export interface NormalizedGoal extends BaseEntity {
   weightage: number;
   progress: number;
 
-  // Lifecycle & Manager Approval
+  // Lifecycle — Manager Approval
   submitted_at: string | null;
   approved_by: string | null;
   approved_at: string | null;
@@ -38,6 +39,13 @@ export interface NormalizedGoal extends BaseEntity {
 
   is_locked: boolean;
   is_shared: boolean;
+
+  // Phase 3: Granular lifecycle audit columns
+  locked_at: string | null;
+  locked_by: string | null;
+  reviewed_at: string | null;
+  reviewed_by: string | null;
+  last_review_action: GoalReviewAction | null;
 
   // Autosave tracking
   last_autosaved_at: string | null;

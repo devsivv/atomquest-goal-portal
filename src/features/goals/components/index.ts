@@ -4,6 +4,4 @@
  * Goal-specific components (GoalCard, GoalList, GoalForm) will be exported here.
  */
 
-// export { GoalCard } from "./GoalCard"
-// export { GoalList } from "./GoalList"
-// export { GoalForm } from "./GoalForm"
+export { GoalCreationDashboard } from "./GoalCreationDashboard";

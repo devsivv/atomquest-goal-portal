@@ -12,7 +12,6 @@ import { baseGoalFields, uomTargetRefinement } from "./fields.schema";
  * Ensures all required fields are present and structurally valid.
  */
 export const goalSubmissionSchema = z.object({
-  cycle_id: z.string().uuid("Invalid cycle ID"),
   title: baseGoalFields.title,
   description: baseGoalFields.description,
   thrust_area: baseGoalFields.thrust_area,

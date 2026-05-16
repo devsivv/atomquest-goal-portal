@@ -17,13 +17,18 @@ export type GoalUomType =
 
 /**
  * Goal lifecycle statuses
- * Mirrors PostgreSQL goal_status enum.
+ * Mirrors PostgreSQL goal_status enum (full set).
+ * The frontend may display a simplified 4-state view via normalizeStatus().
  */
 export type GoalStatus =
   | "draft"
   | "submitted"
+  | "under_review"
+  | "revision_requested"
   | "approved"
-  | "rejected";
+  | "rejected"
+  | "completed"
+  | "archived";
 
 /**
  * Quarterly progress tracking statuses

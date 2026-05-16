@@ -1,32 +1,38 @@
 import type { Metadata } from "next";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { authService } from "@/features/auth/services/auth.service";
+import { GoalCreationDashboard } from "@/features/goals/components";
+import { ROUTES } from "@/constants";
 
 export const metadata: Metadata = {
   title: "Goals",
-  description: "Manage and track all your goals.",
+  description: "Create, manage, and track your goals.",
 };
 
-export default function GoalsPage() {
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Goals</h1>
-          <p className="text-muted-foreground">
-            Create, manage, and track your goals.
-          </p>
-        </div>
-        {/* CreateGoalButton will go here */}
-        <button className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground">
-          + New Goal
-        </button>
-      </div>
+export default async function GoalsPage() {
+  const profile = await authService.getCurrentProfile();
+  if (!profile) redirect(ROUTES.LOGIN);
 
-      {/* GoalsList component from @/features/goals/components will go here */}
-      <div className="rounded-lg border bg-card p-6 shadow-sm">
-        <p className="text-sm text-muted-foreground">
-          Goals list will render here.
-        </p>
+  const supabase = await createClient();
+  const { data: activeCycle } = await supabase
+    .from("goal_cycles")
+    .select("id")
+    .eq("is_default", true)
+    .single();
+
+  if (!activeCycle) {
+    return (
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800/40 dark:bg-amber-900/10 dark:text-amber-400 mb-6">
+        No active goal cycle found. Please contact an administrator.
       </div>
-    </div>
+    );
+  }
+
+  return (
+    <GoalCreationDashboard 
+      profileId={profile.id} 
+      cycleId={activeCycle.id} 
+    />
   );
 }

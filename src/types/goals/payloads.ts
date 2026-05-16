@@ -40,8 +40,6 @@ export type GoalDraftPayload = Partial<GoalFormPayload>;
  * Mirrors required backend business constraints.
  */
 export interface GoalSubmissionPayload {
-  cycle_id: string;
-
   thrust_area: string;
 
   title: string;

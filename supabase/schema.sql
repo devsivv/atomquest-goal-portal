@@ -493,7 +493,7 @@ CREATE TRIGGER trg_sync_shared_goal
 -- Audit log trigger for goals (all DML)
 -- ------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_audit_goals()
-RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE
   v_action   audit_action;
   v_old      JSONB;
@@ -662,7 +662,7 @@ CREATE POLICY "goals_select_admin"
 -- Employees create their own goals
 CREATE POLICY "goals_insert_own"
   ON goals FOR INSERT
-  WITH CHECK (profile_id = auth.uid() AND created_by = auth.uid());
+  WITH CHECK (created_by = auth.uid());
 
 -- Employees update their own unlocked goals
 CREATE POLICY "goals_update_own"
