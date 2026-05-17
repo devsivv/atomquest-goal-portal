@@ -9,13 +9,13 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { 
-  Target, 
-  TrendingUp, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Plus, 
-  ChevronRight, 
+import {
+  Target,
+  TrendingUp,
+  CheckCircle2,
+  AlertTriangle,
+  Plus,
+  ChevronRight,
   Calendar,
   Layers,
   Sparkles
@@ -37,7 +37,7 @@ export default async function EmployeeDashboardPage() {
   noStore();
 
   const supabase = await createClient();
-  
+
   // getUser() establishes the RLS context for all downstream queries.
   // Without this call, subsequent .from() queries run as anon and RLS
   // policy `goals_select_own` (profile_id = auth.uid()) returns 0 rows.
@@ -64,14 +64,19 @@ export default async function EmployeeDashboardPage() {
     .eq("is_default", true)
     .single();
 
-  // ─── Fetch goals — inline query avoids service layer abstraction issues ───
+  // ─── Fetch goals — canonical query ──────────────────────────────
   //
-  // Direct query with user.id (== profile.id by FK) ensures the RLS
-  // policy `profile_id = auth.uid()` resolves correctly with no intermediary.
+  // IMPORTANT:
+  // We explicitly include all active workflow states so the dashboard
+  // works for:
+  // - autosaved draft goals
+  // - submitted goals
+  // - approved goals
   //
-  // The RLS SELECT policy already enforces deleted_at IS NULL server-side,
-  // but we add it here too for defence-in-depth and to match the index hint
-  // on idx_goals_active (profile_id, cycle_id) WHERE deleted_at IS NULL.
+  // Without this filter, stale placeholder rows or soft-deleted draft
+  // anchors can corrupt dashboard reconstruction after refresh.
+  //
+
   let rawGoals: NormalizedGoal[] = [];
 
   if (activeCycle) {
@@ -81,12 +86,23 @@ export default async function EmployeeDashboardPage() {
       .eq("profile_id", user.id)
       .eq("cycle_id", activeCycle.id)
       .is("deleted_at", null)
+      .in("status", [
+        "draft",
+        "submitted",
+        "approved",
+        "revision_requested"
+      ])
       .order("created_at", { ascending: true });
 
     if (error) {
       console.error("[EmployeeDashboard] Goals fetch error:", error.message);
     } else {
+      console.log("[EmployeeDashboard] Goals fetched:", data);
       rawGoals = (data ?? []) as NormalizedGoal[];
+      console.log(
+        "[EmployeeDashboard] goalsList raw count:",
+        rawGoals.length
+      );
     }
   }
 
@@ -104,7 +120,12 @@ export default async function EmployeeDashboardPage() {
   // Note: after employee_submit_goals RPC, the anchor IS soft-deleted and 2
   // new submitted rows are inserted — so state B is the post-submission case.
 
-  const anchorRow = rawGoals.find((g) => g.draft_content !== null);
+  const anchorRow = rawGoals.find(
+    (g) =>
+      g.status === "draft" &&
+      g.deleted_at === null &&
+      g.draft_content != null
+  );
   let goalsList: Array<Partial<NormalizedGoal> & { id: string; title: string; status: string; weightage: number; progress: number; }> = [];
 
   if (anchorRow) {
@@ -112,22 +133,22 @@ export default async function EmployeeDashboardPage() {
     const draftItems = (anchorRow.draft_content as unknown as GoalDraftPayload[]) ?? [];
     goalsList = Array.isArray(draftItems)
       ? draftItems.map((dg, idx) => ({
-          id: `draft-${idx}`,
-          profile_id: user.id,
-          cycle_id: activeCycle?.id ?? "",
-          title: dg.title || "Untitled Draft Goal",
-          description: dg.description ?? null,
-          thrust_area: dg.thrust_area || "General",
-          status: "draft",
-          uom_type: dg.uom_type,
-          target_value: dg.target_value != null ? Number(dg.target_value) : null,
-          achievement_value: null,
-          deadline_date: dg.deadline_date ?? null,
-          weightage: dg.weightage != null ? Number(dg.weightage) : 0,
-          progress: 0,
-          created_at: anchorRow.created_at,
-          updated_at: anchorRow.updated_at,
-        }))
+        id: `draft-${idx}`,
+        profile_id: user.id,
+        cycle_id: activeCycle?.id ?? "",
+        title: dg.title || "Untitled Draft Goal",
+        description: dg.description ?? null,
+        thrust_area: dg.thrust_area || "General",
+        status: "draft",
+        uom_type: dg.uom_type,
+        target_value: dg.target_value != null ? Number(dg.target_value) : null,
+        achievement_value: null,
+        deadline_date: dg.deadline_date ?? null,
+        weightage: dg.weightage != null ? Number(dg.weightage) : 0,
+        progress: 0,
+        created_at: anchorRow.created_at,
+        updated_at: anchorRow.updated_at,
+      }))
       : [];
   } else {
     // State B — submitted/approved/etc: use real rows directly
@@ -137,28 +158,26 @@ export default async function EmployeeDashboardPage() {
 
   // Calculate statistics
   const totalGoals = goalsList.length;
-  const completedGoals = goalsList.filter(
-    (g) => g.status === "completed" || g.progress === 100
-  ).length;
 
   const inProgressGoals = goalsList.filter(
-    (g) =>
-      g.status !== "completed" &&
-      g.status !== "rejected" &&
-      g.status !== "archived"
+    (goal) =>
+      goal.status === "submitted" ||
+      goal.status === "approved"
   ).length;
 
-  // Calculate Overdue goals
-  let overdueCount = 0;
-  const now = new Date();
-  goalsList.forEach((g) => {
-    if (g.deadline_date && g.status !== "completed") {
-      const deadline = new Date(g.deadline_date);
-      if (deadline < now) {
-        overdueCount++;
-      }
-    }
-  });
+  const completedGoals = goalsList.filter(
+    (goal) =>
+      goal.status === "approved"
+  ).length;
+
+  const overdueGoals = goalsList.filter((goal) => {
+    if (!goal.deadline_date) return false;
+
+    return (
+      goal.status !== "approved" &&
+      new Date(goal.deadline_date) < new Date()
+    );
+  }).length;
 
   // Format cycle dates
   const formatDate = (dateStr: string) => {
@@ -244,6 +263,8 @@ export default async function EmployeeDashboardPage() {
         </div>
       </div>
 
+
+
       {/* Stats grid */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Total Goals */}
@@ -258,7 +279,7 @@ export default async function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tracking-tight">{totalGoals}</div>
+            <div className="text-3xl font-bold tracking-tight">{goalsList.length}</div>
             <p className="text-xs text-muted-foreground mt-1">Defined for this cycle</p>
           </CardContent>
         </Card>
@@ -275,7 +296,13 @@ export default async function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tracking-tight text-blue-600 dark:text-blue-400">{inProgressGoals}</div>
+            <div className="text-3xl font-bold tracking-tight text-blue-600 dark:text-blue-400">{
+              goalsList.filter(
+                (g) =>
+                  g.status === "submitted" ||
+                  g.status === "approved"
+              ).length
+            }</div>
             <p className="text-xs text-muted-foreground mt-1">Actively tracking progress</p>
           </CardContent>
         </Card>
@@ -292,7 +319,11 @@ export default async function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{completedGoals}</div>
+            <div className="text-3xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">{
+              goalsList.filter(
+                (g) => g.status === "approved"
+              ).length
+            }</div>
             <p className="text-xs text-muted-foreground mt-1">Fully checked off & verified</p>
           </CardContent>
         </Card>
@@ -309,7 +340,7 @@ export default async function EmployeeDashboardPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold tracking-tight text-rose-600 dark:text-rose-400">{overdueCount}</div>
+            <div className="text-3xl font-bold tracking-tight text-rose-600 dark:text-rose-400">{overdueGoals}</div>
             <p className="text-xs text-muted-foreground mt-1">Pending past target date</p>
           </CardContent>
         </Card>

@@ -1,99 +1,81 @@
--- ============================================================
--- AtomQuest — Migration 004: employee_submit_goals RPC
--- ============================================================
--- Replaces the client-side INSERT (which hits RLS/PostgREST
--- edge cases) with a SECURITY DEFINER function that runs under
--- the DB owner's privileges — exactly like the manager approval
--- RPCs in migration 001.
---
--- Canonical fields only (no category, kpis, or metadata):
---   thrust_area, title, description, uom_type,
---   target_value, weightage, deadline_date
---
--- Preserves:
---   * audit logging  (trg_audit_goals fires normally on INSERT)
---   * soft-delete    (UPDATE sets deleted_at before insert)
---   * manager RPCs   (untouched)
---   * validation     (all business rules stay on the client/schema)
--- ============================================================
-
-CREATE OR REPLACE FUNCTION public.employee_submit_goals(
-    p_profile_id   UUID,
-    p_cycle_id     UUID,
-    p_goals        JSONB          -- array of GoalSubmissionPayload objects
+CREATE OR REPLACE FUNCTION employee_submit_goals(
+  p_profile_id uuid,
+  p_cycle_id uuid,
+  p_goals jsonb
 )
 RETURNS void
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public
 AS $$
 DECLARE
-    v_goal  JSONB;
+  goal jsonb;
 BEGIN
-    -- ── 1. Ownership guard ──────────────────────────────────────────
-    -- Only the authenticated user whose UUID matches p_profile_id
-    -- may call this function.  All ownership logic lives here so the
-    -- client never needs to do a fragile auth.uid() == profileId check.
-    IF auth.uid() IS NULL THEN
-        RAISE EXCEPTION 'UNAUTHENTICATED: No active session.';
+  -- Authentication
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Unauthorized';
+  END IF;
+
+  IF auth.uid() <> p_profile_id THEN
+    RAISE EXCEPTION 'Cannot submit goals for another user';
+  END IF;
+
+  -- Validate payload exists
+  IF p_goals IS NULL OR jsonb_array_length(p_goals) = 0 THEN
+    RAISE EXCEPTION 'No goals supplied';
+  END IF;
+
+  -- PRE-VALIDATE ALL GOALS BEFORE DELETING ANYTHING
+  FOR goal IN SELECT * FROM jsonb_array_elements(p_goals)
+  LOOP
+    IF trim(COALESCE(goal->>'title', '')) = '' THEN
+      RAISE EXCEPTION 'Goal title is required';
     END IF;
 
-    IF auth.uid() <> p_profile_id THEN
-        RAISE EXCEPTION 'FORBIDDEN: caller auth.uid() does not match p_profile_id.';
+    IF trim(COALESCE(goal->>'thrust_area', '')) = '' THEN
+      RAISE EXCEPTION 'Thrust area is required';
     END IF;
 
-    -- ── 2. Soft-delete existing goals for this cycle ────────────────
-    -- Uses an explicit alias to avoid ambiguous column references.
-    UPDATE goals g
-       SET deleted_at = now(),
-           deleted_by = p_profile_id
-     WHERE g.profile_id = p_profile_id
-       AND g.cycle_id   = p_cycle_id
-       AND g.deleted_at IS NULL;
+    IF trim(COALESCE(goal->>'uom_type', '')) = '' THEN
+      RAISE EXCEPTION 'UOM type is required';
+    END IF;
 
-    -- ── 3. Insert finalized goal rows ────────────────────────────────
-    -- Cast precedence is explicit: (expr)::type, never expr::type on
-    -- a ->> extraction.  The audit trigger fires for every row inserted.
-    FOR v_goal IN SELECT jsonb_array_elements(p_goals) LOOP
-        INSERT INTO goals (
-            profile_id,
-            cycle_id,
-            thrust_area,
-            title,
-            description,
-            uom_type,
-            target_value,
-            weightage,
-            deadline_date,
-            status,
-            submitted_at,
-            created_by,
-            updated_by
-        )
-        VALUES (
-            p_profile_id,
-            p_cycle_id,
-            v_goal->>'thrust_area',
-            v_goal->>'title',
-            v_goal->>'description',
-            (v_goal->>'uom_type')::goal_uom_type,
-            (v_goal->>'target_value')::numeric,
-            (v_goal->>'weightage')::int,
-            (v_goal->>'deadline_date')::date,
-            'submitted',
-            now(),
-            p_profile_id,
-            p_profile_id
-        );
-    END LOOP;
-END;
+    IF COALESCE(goal->>'weightage', '') = '' THEN
+      RAISE EXCEPTION 'Weightage is required';
+    END IF;
+
+    IF COALESCE(goal->>'target_value', '') = '' THEN
+      RAISE EXCEPTION 'Target value is required';
+    END IF;
+
+    -- Safe numeric validation
+    BEGIN
+      PERFORM (goal->>'weightage')::numeric;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid weightage value';
+    END;
+
+    BEGIN
+      PERFORM (goal->>'target_value')::numeric;
+    EXCEPTION WHEN OTHERS THEN
+      RAISE EXCEPTION 'Invalid target value';
+    END;
+  END LOOP;
+
+  -- INSERT NEW ROWS FIRST
+  FOR goal IN SELECT * FROM jsonb_array_elements(p_goals)
+  LOOP
+    INSERT INTO goals (
+      profile_id,
+      cycle_id,
+      title,
+      thrust_area,
+      description,
+      uom_type,
+      weightage,
+      target_value,
+      target_date,
+      status,
+      created_by,
+      updated_by,
+      created_at,
 $$;
-
--- Allow the normal authenticated Supabase client to call the RPC.
-GRANT EXECUTE
-    ON FUNCTION public.employee_submit_goals(UUID, UUID, JSONB)
-    TO authenticated;
-
--- ============================================================
--- END OF MIGRATION 004
--- ============================================================
