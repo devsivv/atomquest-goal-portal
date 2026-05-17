@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { unstable_noStore as noStore } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { goalsService } from "@/features/goals/services/goals.service";
+import type { NormalizedGoal } from "@/types";
+import type { GoalDraftPayload } from "@/types/goals";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -19,85 +21,119 @@ import {
   Sparkles
 } from "lucide-react";
 
+// Force this server component to always fetch fresh data — never serve from cache.
+// This is the critical fix: without this, Next.js may cache SSR output and
+// the dashboard shows stale 0-goal data even after goals are submitted.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Employee Dashboard | Quartiq",
   description: "Your Quartiq goal tracking overview.",
 };
 
 export default async function EmployeeDashboardPage() {
+  // Opt out of Next.js data caching entirely for this server component.
+  // Required so the dashboard always reflects the latest DB state.
+  noStore();
+
   const supabase = await createClient();
   
-  // Call getUser() to verify session and set Authorization header for subsequent RLS queries
+  // getUser() establishes the RLS context for all downstream queries.
+  // Without this call, subsequent .from() queries run as anon and RLS
+  // policy `goals_select_own` (profile_id = auth.uid()) returns 0 rows.
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) {
-    console.error("[EmployeeDashboard] Auth error or no user found:", authError);
     redirect("/login");
   }
 
-  console.log("[EmployeeDashboard] Logged in user ID:", user.id);
-
-  // Fetch profile
+  // Fetch profile — profiles.id = auth.users.id (enforced by FK)
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("*")
+    .select("id, full_name, role")
     .eq("id", user.id)
     .single();
 
   if (profileError || !profile) {
-    console.error("[EmployeeDashboard] Profile fetch error:", profileError);
     redirect("/login");
   }
 
-  console.log("[EmployeeDashboard] Profile name:", profile.full_name);
-
   // Fetch active default cycle
-  const { data: activeCycle, error: cycleError } = await supabase
+  const { data: activeCycle } = await supabase
     .from("goal_cycles")
     .select("id, name, start_date, end_date")
     .eq("is_default", true)
     .single();
 
-  if (cycleError) {
-    console.error("[EmployeeDashboard] Active cycle fetch error:", cycleError);
+  // ─── Fetch goals — inline query avoids service layer abstraction issues ───
+  //
+  // Direct query with user.id (== profile.id by FK) ensures the RLS
+  // policy `profile_id = auth.uid()` resolves correctly with no intermediary.
+  //
+  // The RLS SELECT policy already enforces deleted_at IS NULL server-side,
+  // but we add it here too for defence-in-depth and to match the index hint
+  // on idx_goals_active (profile_id, cycle_id) WHERE deleted_at IS NULL.
+  let rawGoals: NormalizedGoal[] = [];
+
+  if (activeCycle) {
+    const { data, error } = await supabase
+      .from("goals")
+      .select("*")
+      .eq("profile_id", user.id)
+      .eq("cycle_id", activeCycle.id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      console.error("[EmployeeDashboard] Goals fetch error:", error.message);
+    } else {
+      rawGoals = (data ?? []) as NormalizedGoal[];
+    }
   }
 
-  console.log("[EmployeeDashboard] Active cycle:", activeCycle);
+  // ─── Resolve goalsList from raw DB rows ─────────────────────────────────
+  //
+  // Two possible states after the query:
+  //
+  // A) DRAFTING: 1 anchor row exists with draft_content = GoalDraftPayload[]
+  //    The anchor itself is a placeholder (title="Cycle Planning Draft").
+  //    Actual goal items live inside the JSONB array. We expand them.
+  //
+  // B) SUBMITTED / APPROVED / etc: 2+ real goal rows with draft_content = NULL
+  //    rawGoals IS the goalsList directly.
+  //
+  // Note: after employee_submit_goals RPC, the anchor IS soft-deleted and 2
+  // new submitted rows are inserted — so state B is the post-submission case.
 
-  // Fetch goals for active cycle
-  const rawGoals = activeCycle
-    ? await goalsService.getEmployeeGoalsForCycle(supabase, profile.id, activeCycle.id)
-    : [];
+  const anchorRow = rawGoals.find((g) => g.draft_content !== null);
+  let goalsList: Array<Partial<NormalizedGoal> & { id: string; title: string; status: string; weightage: number; progress: number; }> = [];
 
-  console.log(`[EmployeeDashboard] Scoped raw goals fetched: ${rawGoals.length}`);
-
-  // Parse draft goals if currently in drafting phase (JSONB anchor has draft_content)
-  const hasDraft = rawGoals.some((g) => g.draft_content !== null);
-  let goalsList = rawGoals;
-
-  if (hasDraft) {
-    const anchor = rawGoals.find((g) => g.draft_content !== null);
-    const draftPayloads = (anchor?.draft_content as any) ?? [];
-    console.log(`[EmployeeDashboard] Anchor draft found with ${draftPayloads.length} items`);
-    goalsList = draftPayloads.map((dg: any, idx: number) => ({
-      id: `draft-${idx}`,
-      profile_id: profile.id,
-      cycle_id: activeCycle?.id || "",
-      title: dg.title || "Untitled Draft Goal",
-      description: dg.description ?? null,
-      thrust_area: dg.thrust_area || "General",
-      status: "draft",
-      uom_type: dg.uom_type || "numeric_max",
-      target_value: dg.target_value ? Number(dg.target_value) : null,
-      achievement_value: null,
-      deadline_date: dg.deadline_date ?? null,
-      weightage: dg.weightage ? Number(dg.weightage) : 0,
-      progress: 0,
-      created_at: anchor?.created_at || new Date().toISOString(),
-      updated_at: anchor?.updated_at || new Date().toISOString(),
-    }));
+  if (anchorRow) {
+    // State A — drafting: expand JSONB array into display items
+    const draftItems = (anchorRow.draft_content as unknown as GoalDraftPayload[]) ?? [];
+    goalsList = Array.isArray(draftItems)
+      ? draftItems.map((dg, idx) => ({
+          id: `draft-${idx}`,
+          profile_id: user.id,
+          cycle_id: activeCycle?.id ?? "",
+          title: dg.title || "Untitled Draft Goal",
+          description: dg.description ?? null,
+          thrust_area: dg.thrust_area || "General",
+          status: "draft",
+          uom_type: dg.uom_type,
+          target_value: dg.target_value != null ? Number(dg.target_value) : null,
+          achievement_value: null,
+          deadline_date: dg.deadline_date ?? null,
+          weightage: dg.weightage != null ? Number(dg.weightage) : 0,
+          progress: 0,
+          created_at: anchorRow.created_at,
+          updated_at: anchorRow.updated_at,
+        }))
+      : [];
+  } else {
+    // State B — submitted/approved/etc: use real rows directly
+    goalsList = rawGoals;
   }
 
-  console.log(`[EmployeeDashboard] Final parsed goals count: ${goalsList.length}`);
 
   // Calculate statistics
   const totalGoals = goalsList.length;
