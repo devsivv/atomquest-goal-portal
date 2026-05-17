@@ -4,8 +4,20 @@
  * @file features/goals/components/GoalCreationDashboard.tsx
  * @description Client orchestrator for the employee goal-planning workflow.
  *
- * Mode lifecycle (driven by DB state fetched on mount):
+ * ── Optimistic UI Architecture ──────────────────────────────────────────────
  *
+ * BEFORE (blocking):
+ *   click → await RPC (~800ms) → toast → await refetch (~300ms) → setState
+ *   Total perceived latency: ~1100ms+ of blocked UI
+ *
+ * AFTER (optimistic):
+ *   click → INSTANT setState("submitted") + toast.loading
+ *          → background: await RPC
+ *          → success: toast.success + reconcile from DB
+ *          → failure: rollback setState + toast.error
+ *   Perceived latency: ~0ms (feels instant like Linear/Vercel)
+ *
+ * ── Mode lifecycle (driven by DB state fetched on mount) ────────────────────
  *   "loading"   — initial fetch in progress
  *   "empty"     — no goals in DB; show add-first-goal CTA
  *   "drafting"  — JSONB anchor exists; form is pre-populated from draft_content
@@ -13,12 +25,9 @@
  *   "submitted" — goals awaiting review; read-only GoalStatusView
  *   "approved"  — goals approved & locked; read-only GoalStatusView
  *   "rejected"  — goals rejected; read-only GoalStatusView + re-edit CTA
- *
- * Autosave fires in "empty" and "drafting" modes only.
- * Submission (via SECURITY DEFINER RPC) works in "empty", "drafting", and "revision".
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useTransition, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,6 +35,7 @@ import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { showToast } from "@/lib/toast";
 import { Loader2, PenLine } from "lucide-react";
+import { toast } from "sonner";
 
 import { goalCollectionSchema } from "@/features/goals/schemas";
 import { goalsService } from "@/features/goals/services/goals.service";
@@ -39,6 +49,11 @@ import { GoalTrackerBanner } from "./GoalTrackerBanner";
 import { GoalFormArray } from "./GoalFormArray";
 import { AutosaveIndicator, type AutosaveState } from "./AutosaveIndicator";
 import { GoalStatusView } from "./GoalStatusView";
+
+// ─── Supabase client: singleton outside component to avoid recreation ─────────
+// Creating the client inside the component body causes a new instance on every
+// render, which defeats connection pooling and breaks subscription cleanup.
+const supabaseClient = createClient();
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -103,6 +118,52 @@ function detectMode(goals: NormalizedGoal[]): GoalMode {
   return "submitted"; // safe fallback
 }
 
+/**
+ * Build an optimistic NormalizedGoal[] from form values.
+ * These are displayed instantly before the server round-trip completes.
+ */
+function buildOptimisticGoals(
+  goals: GoalDraftPayload[],
+  profileId: string,
+  cycleId: string
+): NormalizedGoal[] {
+  const now = new Date().toISOString();
+  return goals.map((g, idx) => ({
+    id:                 `optimistic-${idx}`,
+    profile_id:         profileId,
+    cycle_id:           cycleId,
+    title:              g.title ?? "Untitled Goal",
+    description:        g.description ?? null,
+    thrust_area:        g.thrust_area ?? "General",
+    status:             "submitted" as const,
+    uom_type:           g.uom_type ?? "numeric_max",
+    target_value:       g.target_value != null ? Number(g.target_value) : null,
+    achievement_value:  null,
+    deadline_date:      g.deadline_date ?? null,
+    weightage:          g.weightage != null ? Number(g.weightage) : 0,
+    progress:           0,
+    submitted_at:       now,
+    approved_by:        null,
+    approved_at:        null,
+    rejected_reason:    null,
+    is_locked:          false,
+    is_shared:          false,
+    locked_at:          null,
+    locked_by:          null,
+    reviewed_at:        null,
+    reviewed_by:        null,
+    last_review_action: null,
+    last_autosaved_at:  null,
+    draft_content:      null,
+    deleted_at:         null,
+    deleted_by:         null,
+    created_by:         profileId,
+    updated_by:         profileId,
+    created_at:         now,
+    updated_at:         now,
+  }));
+}
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashboardProps) {
@@ -111,7 +172,12 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
 
-  const client = createClient();
+  // useTransition for non-urgent state updates (background reconcile after submit)
+  const [isSubmitting, startSubmitTransition] = useTransition();
+
+  // Ref to track the pre-submit form state for rollback
+  const preSubmitModeRef = useRef<GoalMode>("empty");
+  const preSubmitGoalsRef = useRef<NormalizedGoal[]>([]);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(z.object({ goals: goalCollectionSchema })) as any,
@@ -129,7 +195,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
     async function loadGoals() {
       try {
         const goals = await goalsService.getEmployeeGoalsForCycle(
-          client,
+          supabaseClient,
           profileId,
           cycleId
         );
@@ -140,21 +206,18 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
         setFetchedGoals(goals);
         setMode(detectedMode);
 
-        // Pre-populate the RHF form when the employee needs to (re)edit
         if (detectedMode === "drafting") {
           const anchor = goals.find((g) => g.draft_content !== null);
           const draftGoals = (anchor?.draft_content as unknown as GoalDraftPayload[]) ?? [];
           reset({ goals: draftGoals });
         } else if (detectedMode === "revision") {
-          // Map real DB rows back to the permissive draft payload for editing
           reset({ goals: goalsToDraftPayload(goals) });
         }
-        // "empty": form already has defaultValues: { goals: [] } — no reset needed
       } catch (err) {
         if (cancelled) return;
         console.error("GoalCreationDashboard: failed to load goals", err);
         showToast.error({ title: "Failed to load your goals. Please refresh." });
-        setMode("empty"); // safe fallback — allow the employee to start fresh
+        setMode("empty");
       }
     }
 
@@ -192,37 +255,84 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, watch]);
 
-  // ─── Submit handler ─────────────────────────────────────────────────────────
+  // ─── OPTIMISTIC Submit handler ──────────────────────────────────────────────
+  //
+  // Timeline:
+  //   T+0ms:    Capture snapshot for rollback
+  //   T+0ms:    Build optimistic submitted goals from form values
+  //   T+0ms:    setMode("submitted") + setFetchedGoals(optimistic) → INSTANT UI
+  //   T+0ms:    toast.loading("Submitting...")
+  //   T+Xms:    await submitGoalsAction() [background, non-blocking to render]
+  //   T+Xms:    On success: update toast → "Submitted!" + reconcile from DB
+  //   T+Xms:    On failure: rollback mode + goals + toast.error
 
   const onSubmit = useCallback(
-    async (data: FormValues) => {
-      try {
-        const res = await submitGoalsAction(
-          profileId,
-          cycleId,
-          data.goals as any
-        );
-        if (!res.success) throw new Error(res.error);
+    (data: FormValues) => {
+      // ── 1. Snapshot current state for rollback ────────────────────────────
+      preSubmitModeRef.current = mode;
+      preSubmitGoalsRef.current = fetchedGoals;
 
-        showToast.success({ title: "Goals submitted successfully for manager review!" });
+      // ── 2. Build optimistic submitted goals from current form values ──────
+      const optimisticGoals = buildOptimisticGoals(
+        data.goals as GoalDraftPayload[],
+        profileId,
+        cycleId
+      );
 
-        // Optimistically switch to the submitted view without a full reload
-        const refreshed = await goalsService.getEmployeeGoalsForCycle(
-          client,
-          profileId,
-          cycleId
-        );
-        setFetchedGoals(refreshed);
-        setMode(detectMode(refreshed));
-      } catch (error) {
-        console.error(error);
-        showToast.error({
-          title: error instanceof Error ? error.message : "Failed to submit goals. Please try again.",
-        });
-      }
+      // ── 3. INSTANT optimistic UI update — no await, no blocking ──────────
+      setFetchedGoals(optimisticGoals);
+      setMode("submitted");
+
+      // ── 4. Show loading toast immediately ─────────────────────────────────
+      const toastId = toast.loading("Submitting goals for review…");
+
+      // ── 5. Background server mutation via useTransition ───────────────────
+      //    useTransition marks this as non-urgent — React won't block
+      //    the optimistic render to run this.
+      startSubmitTransition(async () => {
+        try {
+          const res = await submitGoalsAction(
+            profileId,
+            cycleId,
+            data.goals as any
+          );
+
+          if (!res.success) throw new Error(res.error);
+
+          // ── 6a. Success: upgrade toast and reconcile from authoritative DB
+          toast.success("Goals submitted for manager review!", {
+            id: toastId,
+            description: "Your manager will be notified shortly.",
+            duration: 4000,
+          });
+
+          // Reconcile: fetch the real server state in the background.
+          // This replaces the optimistic rows with canonical DB rows
+          // (with real IDs, submitted_at timestamps, etc.)
+          const refreshed = await goalsService.getEmployeeGoalsForCycle(
+            supabaseClient,
+            profileId,
+            cycleId
+          );
+          setFetchedGoals(refreshed);
+          setMode(detectMode(refreshed));
+
+        } catch (error) {
+          // ── 6b. Failure: rollback optimistic state and show error ─────────
+          setFetchedGoals(preSubmitGoalsRef.current);
+          setMode(preSubmitModeRef.current);
+
+          toast.error(
+            error instanceof Error ? error.message : "Submission failed. Please try again.",
+            { id: toastId, duration: 5000 }
+          );
+
+          console.error("[GoalCreationDashboard] submitGoalsAction failed:", error);
+        }
+      });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [profileId, cycleId]
+    [profileId, cycleId, mode, fetchedGoals]
   );
 
   const onError = (errors: unknown) => {
@@ -244,11 +354,10 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
     (sum, g) => sum + (Number(g.weightage) || 0),
     0
   );
-  const canSubmit = watchedGoals.length > 0 && totalWeightage === 100;
+  const canSubmit = watchedGoals.length > 0 && totalWeightage === 100 && !isSubmitting;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
-  // Loading
   if (mode === "loading") {
     return <GoalCreationSkeleton />;
   }
@@ -326,10 +435,15 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
             <Button
               type="submit"
               size="lg"
-              className="w-full md:w-auto"
+              className="w-full md:w-auto min-w-[180px] gap-2 transition-all duration-200"
               disabled={!canSubmit}
             >
-              {mode === "revision" ? "Re-submit for Approval" : "Submit for Approval"}
+              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isSubmitting
+                ? "Submitting…"
+                : mode === "revision"
+                ? "Re-submit for Approval"
+                : "Submit for Approval"}
             </Button>
           </div>
         </form>

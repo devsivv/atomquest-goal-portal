@@ -6,7 +6,11 @@ import { goalsService } from "../services/goals.service";
 import type { GoalDraftPayload, GoalSubmissionPayload } from "@/types";
 
 /**
- * Saves or updates an employee's goal draft
+ * Saves or updates an employee's goal draft.
+ *
+ * NOTE: No revalidatePath here — autosave is client-driven and the
+ * dashboard uses force-dynamic, so cache invalidation on every
+ * autosave keystroke is unnecessary overhead (~50-100ms per save).
  */
 export async function saveGoalDraftAction(
   profileId: string,
@@ -16,17 +20,10 @@ export async function saveGoalDraftAction(
   try {
     const supabase = await createClient();
     
-    // Auth Check
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) throw new Error("Unauthorized");
 
-    // Perform DB Mutation
     await goalsService.saveDraft(supabase, profileId, cycleId, goals);
-
-    // Revalidate paths to clear Next.js cache
-    revalidatePath("/employee");
-    revalidatePath("/employee/plan");
-    revalidatePath("/goals");
 
     return { success: true };
   } catch (error: any) {
@@ -34,6 +31,7 @@ export async function saveGoalDraftAction(
     return { success: false, error: error.message };
   }
 }
+
 
 /**
  * Finalizes employee goal submission via Security Definer RPC
