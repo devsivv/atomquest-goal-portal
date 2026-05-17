@@ -1,7 +1,8 @@
 import { NormalizedGoal, QuarterlyCheckin, QuarterlyGoalUpdate } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Lock } from "lucide-react";
+import { CheckCircle2, Lock, Activity } from "lucide-react";
+import { determineGoalHealth, GoalHealth } from "../../utils/health";
 
 interface TeamCheckinTableProps {
   goals: NormalizedGoal[];
@@ -34,6 +35,7 @@ export function TeamCheckinTable({ goals, checkins, updates, onReviewClick }: Te
             <th className="p-3 text-center font-medium w-24">Weight</th>
             <th className="p-3 text-center font-medium w-28">Status</th>
             <th className="p-3 text-center font-medium w-24">Progress</th>
+            <th className="p-3 text-center font-medium w-24">Health</th>
             <th className="p-3 text-right font-medium w-32">Action</th>
           </tr>
         </thead>
@@ -69,6 +71,16 @@ export function TeamCheckinTable({ goals, checkins, updates, onReviewClick }: Te
                 </td>
                 <td className="p-3 text-center">
                   {checkin ? <span className="font-bold">{checkin.progress_pct}%</span> : <span className="text-xs text-muted-foreground font-medium bg-muted px-2 py-1 rounded-md">Pending</span>}
+                </td>
+                <td className="p-3 text-center">
+                  {(() => {
+                    const health = determineGoalHealth(goal, checkin);
+                    if (health === "stalled") return <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20">Stalled</Badge>;
+                    if (health === "at_risk") return <Badge variant="outline" className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 dark:text-amber-400">At Risk</Badge>;
+                    if (health === "not_started") return <span className="text-xs text-muted-foreground font-medium bg-muted px-2 py-1 rounded-md">Not Started</span>;
+                    if (health === "completed") return <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20 border-emerald-500/20 dark:text-emerald-400">Completed</Badge>;
+                    return <Badge variant="outline" className="bg-green-500/10 text-green-600 hover:bg-green-500/20 border-green-500/20 dark:text-green-400">Healthy</Badge>;
+                  })()}
                 </td>
                 <td className="p-3 text-right">
                   {isSubmitted && (

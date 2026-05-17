@@ -7,28 +7,37 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Trash2 } from "lucide-react";
+import { Trash2, Lock } from "lucide-react";
 import { UOM_LABELS } from "@/features/goals/utils/uom";
 import type { GoalDraftPayload } from "@/types/goals";
 
 interface GoalFormRowProps {
   index: number;
   onRemove: () => void;
+  /** When true, all inputs are disabled and the remove button is hidden. */
+  disabled?: boolean;
 }
 
-export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
+export function GoalFormRow({ index, onRemove, disabled = false }: GoalFormRowProps) {
   const { control, watch } = useFormContext<{ goals: GoalDraftPayload[] }>();
   
   const uomType = watch(`goals.${index}.uom_type`);
   const needsTargetValue = uomType && uomType !== "timeline" && uomType !== "zero_based";
 
   return (
-    <Card className="shadow-sm transition-all hover:shadow-md">
+    <Card className={`shadow-sm transition-all hover:shadow-md ${disabled ? "opacity-75" : ""}`}>
       <CardHeader className="flex flex-row items-center justify-between pb-2">
         <CardTitle className="text-lg font-semibold">Goal #{index + 1}</CardTitle>
-        <Button variant="ghost" size="icon" onClick={onRemove} className="text-destructive hover:bg-destructive/10">
-          <Trash2 className="h-4 w-4" />
-        </Button>
+        {disabled ? (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Lock className="h-3.5 w-3.5" />
+            Locked
+          </span>
+        ) : (
+          <Button variant="ghost" size="icon" onClick={onRemove} className="text-destructive hover:bg-destructive/10">
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
       </CardHeader>
       
       <CardContent className="space-y-6 pt-4">
@@ -41,7 +50,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
               <FormItem>
                 <FormLabel>Goal Title *</FormLabel>
                 <FormControl>
-                  <Input placeholder="e.g. Increase Q3 revenue" {...field} value={field.value || ""} />
+                  <Input placeholder="e.g. Increase Q3 revenue" {...field} value={field.value || ""} disabled={disabled} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -54,7 +63,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Thrust Area *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} defaultValue={field.value} disabled={disabled}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select" />
@@ -85,7 +94,8 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
                   placeholder="Describe the objective and key deliverables..." 
                   className="resize-none" 
                   {...field} 
-                  value={field.value || ""} 
+                  value={field.value || ""}
+                  disabled={disabled}
                 />
               </FormControl>
               <FormMessage />
@@ -101,7 +111,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
             render={({ field }) => (
               <FormItem className="md:col-span-2">
                 <FormLabel>Unit of Measurement *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} defaultValue={field.value} disabled={disabled}>
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select UOM" />
@@ -125,7 +135,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
               <FormItem>
                 <FormLabel>Weightage (%) *</FormLabel>
                 <FormControl>
-                  <Input type="number" min={10} max={100} placeholder="10" {...field} value={field.value ?? ""} />
+                  <Input type="number" min={10} max={100} placeholder="10" {...field} value={field.value ?? ""} disabled={disabled} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -143,7 +153,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
                 <FormItem>
                   <FormLabel>Target Value *</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="Enter target..." {...field} value={field.value ?? ""} />
+                    <Input type="number" placeholder="Enter target..." {...field} value={field.value ?? ""} disabled={disabled} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -158,7 +168,7 @@ export function GoalFormRow({ index, onRemove }: GoalFormRowProps) {
               <FormItem>
                 <FormLabel>Deadline Date</FormLabel>
                 <FormControl>
-                  <Input type="date" {...field} value={field.value || ""} />
+                  <Input type="date" {...field} value={field.value || ""} disabled={disabled} />
                 </FormControl>
                 <FormMessage />
               </FormItem>

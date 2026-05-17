@@ -2,17 +2,14 @@
 
 /**
  * @file features/manager/components/ApprovalActionModal.tsx
- * @description Modal dialog for approve / reject / request-revision actions.
+ * @description Manager review modal — approve / reject / request-revision.
  *
- * - Approve: optional comment field (positive feedback to employee)
- * - Reject: mandatory reason + optional additional comment
- * - Request Revision: mandatory reason + optional additional comment
- *
- * Calls onConfirm(goalId, action, reason?, comment?) — the dashboard
- * orchestrator maps these to the appropriate RPC function.
+ * Calls reviewGoalAction directly and emits sonner toasts on success/error.
+ * Optional onSuccess callback lets the parent orchestrator refresh local state.
  */
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -24,23 +21,38 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { CheckCircle2, XCircle, RefreshCw, Loader2, MessageSquare } from "lucide-react";
+import {
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Loader2,
+  MessageSquare,
+} from "lucide-react";
+import { reviewGoalAction } from "@/features/goals/actions/goals.actions";
 import type { NormalizedGoal } from "@/types";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 export type ApprovalAction = "approve" | "reject" | "request_revision";
 
+const ACTION_TO_STATUS: Record<ApprovalAction, string> = {
+  approve: "approved",
+  reject: "rejected",
+  request_revision: "revision_requested",
+};
+
 interface ApprovalActionModalProps {
+  /** Goal being reviewed. Pass null to close the modal. */
   goal: NormalizedGoal | null;
+  /** Pre-selected action; the user can switch tabs inside the modal. */
   action: ApprovalAction | null;
+  employeeName?: string;
   onClose: () => void;
-  /** reason = mandatory for reject/revision; comment = optional for all */
-  onConfirm: (
-    goalId: string,
-    action: ApprovalAction,
-    reason?: string,
-    comment?: string
-  ) => Promise<void>;
+  /** Called after a successful RPC — use to refresh parent state. */
+  onSuccess?: (updatedGoal: NormalizedGoal) => void;
 }
+
+// ─── Action config ────────────────────────────────────────────────────────────
 
 interface ActionConfig {
   title: string;
@@ -48,11 +60,10 @@ interface ActionConfig {
   icon: React.ComponentType<{ className?: string }>;
   iconClass: string;
   ctaLabel: string;
-  ctaClass: string;
+  ctaVariantClass: string;
   requiresReason: boolean;
   reasonLabel: string;
   reasonPlaceholder: string;
-  hasOptionalComment: boolean;
   commentLabel: string;
   commentPlaceholder: string;
 }
@@ -61,68 +72,96 @@ const ACTION_CONFIG: Record<ApprovalAction, ActionConfig> = {
   approve: {
     title: "Approve Goal",
     description:
-      "Confirm approval. The goal will be locked immediately. Optionally leave feedback for the employee.",
+      "Goal will be locked immediately. Optionally leave feedback for the employee.",
     icon: CheckCircle2,
     iconClass: "text-emerald-500",
     ctaLabel: "Approve Goal",
-    ctaClass: "bg-emerald-600 hover:bg-emerald-700 text-white focus-visible:ring-emerald-500",
+    ctaVariantClass:
+      "bg-emerald-600 hover:bg-emerald-700 text-white focus-visible:ring-emerald-500",
     requiresReason: false,
     reasonLabel: "",
     reasonPlaceholder: "",
-    hasOptionalComment: true,
     commentLabel: "Approval Feedback (Optional)",
-    commentPlaceholder: "Great work! This goal is well-defined and aligned with team objectives...",
+    commentPlaceholder:
+      "Well-defined goal, aligned with team objectives…",
   },
   reject: {
     title: "Reject Goal",
     description:
-      "This goal will be rejected. Provide a clear reason so the employee can understand the decision.",
+      "Provide a clear reason so the employee understands the decision.",
     icon: XCircle,
     iconClass: "text-red-500",
     ctaLabel: "Reject Goal",
-    ctaClass: "bg-red-600 hover:bg-red-700 text-white focus-visible:ring-red-500",
+    ctaVariantClass:
+      "bg-red-600 hover:bg-red-700 text-white focus-visible:ring-red-500",
     requiresReason: true,
     reasonLabel: "Rejection Reason *",
-    reasonPlaceholder: "Explain why this goal is being rejected and what fundamentally needs to change...",
-    hasOptionalComment: true,
+    reasonPlaceholder:
+      "Explain why this goal is being rejected and what fundamentally needs to change…",
     commentLabel: "Additional Feedback (Optional)",
-    commentPlaceholder: "Any additional context or guidance for the employee...",
+    commentPlaceholder: "Any additional context or guidance…",
   },
   request_revision: {
     title: "Request Revision",
     description:
-      "Ask the employee to revise and re-submit this goal. Provide specific, actionable guidance.",
+      "Ask the employee to revise and re-submit. Provide specific, actionable guidance.",
     icon: RefreshCw,
     iconClass: "text-amber-500",
     ctaLabel: "Send for Revision",
-    ctaClass: "bg-amber-600 hover:bg-amber-700 text-white focus-visible:ring-amber-500",
+    ctaVariantClass:
+      "bg-amber-600 hover:bg-amber-700 text-white focus-visible:ring-amber-500",
     requiresReason: true,
     reasonLabel: "Revision Instructions *",
-    reasonPlaceholder: "Describe exactly what needs to change before re-submission...",
-    hasOptionalComment: true,
+    reasonPlaceholder:
+      "Describe exactly what needs to change before re-submission…",
     commentLabel: "Additional Guidance (Optional)",
-    commentPlaceholder: "Any examples or references that might help the employee revise...",
+    commentPlaceholder: "Examples or references that might help…",
   },
 };
 
+const ACTION_TABS: { key: ApprovalAction; label: string }[] = [
+  { key: "approve", label: "Approve" },
+  { key: "reject", label: "Reject" },
+  { key: "request_revision", label: "Request Revision" },
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export function ApprovalActionModal({
   goal,
-  action,
+  action: initialAction,
+  employeeName,
   onClose,
-  onConfirm,
+  onSuccess,
 }: ApprovalActionModalProps) {
+  const [activeAction, setActiveAction] = useState<ApprovalAction>(
+    initialAction ?? "approve"
+  );
+  useEffect(() => {
+  if (initialAction) {
+    setActiveAction(initialAction);
+  }
+}, [initialAction]);
   const [reason, setReason] = useState("");
   const [comment, setComment] = useState("");
   const [isPending, startTransition] = useTransition();
 
-  const isOpen = !!goal && !!action;
-  const config = action ? ACTION_CONFIG[action] : null;
-  const Icon = config?.icon;
+ 
+  const config = ACTION_CONFIG[activeAction];
+  const Icon = config.icon;
 
-  const canConfirm =
+  const canSubmit =
     !isPending &&
-    config &&
     (!config.requiresReason || reason.trim().length >= 10);
+
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  function handleTabChange(tab: ApprovalAction) {
+    if (isPending) return;
+    setActiveAction(tab);
+    setReason("");
+    setComment("");
+  }
 
   function handleClose() {
     if (isPending) return;
@@ -132,34 +171,64 @@ export function ApprovalActionModal({
   }
 
   function handleConfirm() {
-    if (!goal || !action || !canConfirm) return;
+    if (!goal || !canSubmit) return;
+
     startTransition(async () => {
-      await onConfirm(
+      const status = ACTION_TO_STATUS[activeAction];
+      const result = await reviewGoalAction(
         goal.id,
-        action,
-        reason.trim() || undefined,
-        comment.trim() || undefined
+        status,
+        comment.trim(),
+        reason.trim()
       );
+
+      if (!result.success) {
+        toast.error("Action failed", {
+          description: result.error ?? "An unexpected error occurred.",
+        });
+        return;
+      }
+
+      const actionLabels: Record<ApprovalAction, string> = {
+        approve: "approved",
+        reject: "rejected",
+        request_revision: "sent for revision",
+      };
+
+      toast.success(`Goal ${actionLabels[activeAction]}`, {
+        description: employeeName
+          ? `${employeeName}'s goal has been ${actionLabels[activeAction]}.`
+          : "The goal status has been updated.",
+      });
+
+      onSuccess?.(result.data as NormalizedGoal);
       setReason("");
       setComment("");
       onClose();
     });
   }
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && handleClose()}>
+<Dialog
+  open={!!initialAction}
+  onOpenChange={(open) => {
+    if (!open) {
+      handleClose();
+    }
+  }}
+>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <div className="flex items-center gap-3">
-            {Icon && config && (
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
-                <Icon className={`h-5 w-5 ${config.iconClass}`} />
-              </div>
-            )}
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-muted">
+              <Icon className={`h-5 w-5 ${config.iconClass}`} />
+            </div>
             <div>
-              <DialogTitle>{config?.title}</DialogTitle>
+              <DialogTitle>{config.title}</DialogTitle>
               <DialogDescription className="mt-0.5">
-                {config?.description}
+                {config.description}
               </DialogDescription>
             </div>
           </div>
@@ -168,8 +237,18 @@ export function ApprovalActionModal({
         {/* Goal context card */}
         {goal && (
           <div className="rounded-lg border bg-muted/40 p-3 text-sm space-y-1">
-            <p className="font-medium leading-snug line-clamp-2">{goal.title}</p>
+            <p className="font-medium leading-snug line-clamp-2">
+              {goal.title}
+            </p>
             <div className="flex items-center gap-2 text-xs text-muted-foreground flex-wrap">
+              {employeeName && (
+                <>
+                  <span className="font-medium text-foreground">
+                    {employeeName}
+                  </span>
+                  <span>·</span>
+                </>
+              )}
               <span className="rounded bg-muted px-1.5 py-0.5 font-mono">
                 {goal.thrust_area}
               </span>
@@ -191,9 +270,27 @@ export function ApprovalActionModal({
           </div>
         )}
 
+        {/* Action tabs */}
+        <div className="flex gap-1 rounded-lg border bg-muted/40 p-1">
+          {ACTION_TABS.map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => handleTabChange(key)}
+              disabled={isPending}
+              className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${
+                activeAction === key
+                  ? "bg-background shadow-sm text-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         <div className="space-y-4">
           {/* Mandatory reason (reject / revision only) */}
-          {config?.requiresReason && (
+          {config.requiresReason && (
             <div className="space-y-1.5">
               <Label htmlFor="action-reason" className="text-sm font-medium">
                 {config.reasonLabel}
@@ -216,30 +313,27 @@ export function ApprovalActionModal({
           )}
 
           {/* Optional comment (all actions) */}
-          {config?.hasOptionalComment && (
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="action-comment"
-                className="text-sm font-medium flex items-center gap-1.5"
-              >
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-                {config.commentLabel}
-              </Label>
-              <Textarea
-                id="action-comment"
-                placeholder={config.commentPlaceholder}
-                className="resize-none text-sm"
-                rows={3}
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                disabled={isPending}
-              />
-              <p className="text-xs text-muted-foreground">
-                This comment will be visible to the employee and saved in the
-                approval timeline.
-              </p>
-            </div>
-          )}
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="action-comment"
+              className="text-sm font-medium flex items-center gap-1.5"
+            >
+              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+              {config.commentLabel}
+            </Label>
+            <Textarea
+              id="action-comment"
+              placeholder={config.commentPlaceholder}
+              className="resize-none text-sm"
+              rows={3}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              disabled={isPending}
+            />
+            <p className="text-xs text-muted-foreground">
+              Visible to the employee and saved in the approval timeline.
+            </p>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
@@ -247,12 +341,12 @@ export function ApprovalActionModal({
             Cancel
           </Button>
           <Button
-            className={config?.ctaClass}
+            className={config.ctaVariantClass}
             onClick={handleConfirm}
-            disabled={!canConfirm}
+            disabled={!canSubmit}
           >
             {isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {config?.ctaLabel}
+            {config.ctaLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

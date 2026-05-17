@@ -57,6 +57,7 @@ export function buildQuarterlyWorkflowState(
       goalId: goal.id,
       title: goal.title,
       weightage: goal.weightage,
+      goal,
       checkin,
       update
     };

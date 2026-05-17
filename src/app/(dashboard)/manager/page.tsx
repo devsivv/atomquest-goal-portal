@@ -62,6 +62,7 @@ export default async function ManagerDashboardPage() {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-2">
+
       {/* Cycle context bar */}
       {activeCycle && (
         <div className="flex items-center gap-3 rounded-lg border bg-muted/40 px-4 py-2.5 text-sm mb-6">

@@ -12,7 +12,7 @@ import { DEFAULT_GOAL } from "@/features/goals/constants/defaultGoal";
 
 import type { GoalDraftPayload } from "@/types/goals";
 
-export function GoalFormArray() {
+export function GoalFormArray({ disabled = false }: { disabled?: boolean }) {
   const { control } = useFormContext<{
     goals: GoalDraftPayload[];
   }>();
@@ -32,10 +32,11 @@ export function GoalFormArray() {
           key={field.id}
           index={index}
           onRemove={() => remove(index)}
+          disabled={disabled}
         />
       ))}
 
-      {fields.length === 0 && (
+      {fields.length === 0 && !disabled && (
         <div className="rounded-2xl border-2 border-dashed bg-muted/20 p-12 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
             <Target className="h-8 w-8 text-primary" />
@@ -57,7 +58,7 @@ export function GoalFormArray() {
         </div>
       )}
 
-      {fields.length > 0 && (
+      {fields.length > 0 && !disabled && (
         <div className="flex flex-col items-center justify-center pb-12 pt-4 space-y-2">
           <Button
             type="button"

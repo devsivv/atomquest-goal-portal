@@ -13,6 +13,7 @@
  */
 
 import type { QuarterLabel } from "./scoring";
+import type { NormalizedGoal } from "./entities";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 1. CORE DB MIRRORS
@@ -145,6 +146,7 @@ export interface QuarterlyGoalState {
   goalId: string;
   title: string;
   weightage: number;
+  goal: NormalizedGoal;
   checkin: QuarterlyCheckin | null; // null if not yet created
   update: QuarterlyGoalUpdate | null;
 }

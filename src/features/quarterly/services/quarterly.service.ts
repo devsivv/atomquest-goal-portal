@@ -141,6 +141,49 @@ export const quarterlyService = {
     };
   },
 
+  /** Fetch all check-ins for a manager's team across all quarters (for analytics) */
+  async getAllTeamQuarterlyData(
+    client: SupabaseClient,
+    managerId: string
+  ): Promise<{ checkins: QuarterlyCheckin[], updates: QuarterlyGoalUpdate[] }> {
+    const { data: teamProfiles, error: profilesError } = await client
+      .from("profiles")
+      .select("id")
+      .eq("manager_id", managerId)
+      .eq("is_active", true);
+
+    if (profilesError) throw new Error(profilesError.message);
+    
+    const teamIds = teamProfiles?.map(p => p.id) || [];
+    if (teamIds.length === 0) return { checkins: [], updates: [] };
+
+    const { data: checkins, error: checkinsError } = await client
+      .from("quarterly_checkins")
+      .select("*")
+      .in("employee_id", teamIds)
+      .is("deleted_at", null);
+
+    if (checkinsError) throw new Error(checkinsError.message);
+
+    let updates: QuarterlyGoalUpdate[] = [];
+    if (checkins && checkins.length > 0) {
+      const checkinIds = checkins.map((c: any) => c.id);
+      const { data: updateData, error: updatesError } = await client
+        .from("quarterly_goal_updates")
+        .select("*")
+        .in("checkin_id", checkinIds)
+        .is("deleted_at", null);
+
+      if (updatesError) throw new Error(updatesError.message);
+      updates = updateData || [];
+    }
+
+    return { 
+      checkins: checkins || [], 
+      updates 
+    };
+  },
+
   /** Manager acknowledges a submitted check-in */
   async acknowledgeCheckin(
     client: SupabaseClient,

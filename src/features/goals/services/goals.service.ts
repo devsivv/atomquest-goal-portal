@@ -215,6 +215,39 @@ export const goalsService = {
     return true;
   },
 
+  /**
+   * Review (approve / reject / request revision) a submitted goal via SECURITY DEFINER RPC.
+   * @returns The updated goal row returned by the RPC.
+   */
+  async reviewGoal(
+    client: SupabaseClient,
+    goalId: string,
+    status: string,
+    comment: string,
+    rejectedReason: string
+  ): Promise<NormalizedGoal> {
+    const { data, error } = await client.rpc(
+      "review_employee_goal",
+      {
+        p_goal_id: goalId,
+        p_status: status,
+        p_comment: comment,
+        p_rejected_reason: rejectedReason
+      }
+    );
+
+    if (error) {
+      console.error(
+        "[goalsService.reviewGoal] RPC FAILED:",
+        error
+      );
+
+      throw new Error(error.message);
+    }
+
+    return data as NormalizedGoal;
+  },
+
   /** Soft delete a goal */
   async softDelete(
     client: SupabaseClient,

@@ -190,17 +190,10 @@ export function EmployeeQuarterlyDashboard({ employeeId }: EmployeeQuarterlyDash
             ) : (
               <div className="grid gap-6">
                 {filteredGoals.map(goalState => {
-                  const goalAdapter = {
-                    id: goalState.goalId,
-                    title: goalState.title,
-                    weightage: goalState.weightage,
-                    description: "",
-                  } as any;
-
                   return (
                     <CheckinForm 
                       key={goalState.goalId}
-                      goal={goalAdapter}
+                      goal={goalState.goal}
                       quarter={activeQuarter}
                       existingCheckin={goalState.checkin}
                       isSubmitting={isSubmittingId === goalState.goalId}

@@ -129,3 +129,74 @@ export async function submitGoalsAction(
     };
   }
 }
+
+/**
+ * Reviews (approves / rejects / requests revision for) a submitted employee goal.
+ * Called by managers via the ApprovalActionModal.
+ */
+export async function reviewGoalAction(
+  goalId: string,
+  status: string,
+  comment: string,
+  rejectedReason: string
+) {
+  try {
+    const supabase = await createClient();
+
+    // Auth Check
+    const {
+      data: { user },
+      error: authError
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      throw new Error("Unauthorized");
+    }
+
+    console.log("[reviewGoalAction] Reviewing goal:", {
+      goalId,
+      status,
+      comment,
+      rejectedReason
+    });
+
+    // Perform DB Mutation (RPC-backed)
+    const updatedGoal = await goalsService.reviewGoal(
+      supabase,
+      goalId,
+      status,
+      comment,
+      rejectedReason
+    );
+
+    console.log(
+      "[reviewGoalAction] RPC completed successfully"
+    );
+
+    // Revalidate related routes
+    revalidatePath("/manager");
+    revalidatePath("/employee");
+    revalidatePath("/employee/plan");
+    revalidatePath("/employee/tracking");
+    revalidatePath("/goals");
+
+    console.log(
+      "[reviewGoalAction] Revalidation completed"
+    );
+
+    return {
+      success: true,
+      data: updatedGoal
+    };
+  } catch (error: any) {
+    console.error(
+      "[reviewGoalAction] FAILED:",
+      error
+    );
+
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}

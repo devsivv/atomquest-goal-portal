@@ -146,24 +146,80 @@ function GoalStatusCard({ goal }: { goal: NormalizedGoal }) {
           </span>
         </div>
 
-        {/* Rejection / revision reason */}
-        {goal.rejected_reason && (
-          <div className="rounded-md bg-muted/60 border border-border px-3 py-2 text-xs text-muted-foreground">
-            <span className="font-medium text-foreground">Manager feedback: </span>
-            {goal.rejected_reason}
+        {/* Manager feedback panel — status-differentiated */}
+        {goal.status === "approved" && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-800/40 dark:bg-emerald-900/10">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 mb-1">
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Manager Approval
+            </div>
+            {goal.review_comment && (
+              <p className="text-xs text-emerald-700 dark:text-emerald-400 leading-relaxed">
+                {goal.review_comment}
+              </p>
+            )}
+            {(goal.reviewed_at ?? goal.approved_at) && (
+              <p className="mt-1 text-xs text-emerald-600/70 dark:text-emerald-500/70">
+                Approved on{" "}
+                {new Date(goal.reviewed_at ?? goal.approved_at!).toLocaleDateString("en-IN", {
+                  day: "numeric", month: "short", year: "numeric",
+                })}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Approval timestamp */}
-        {goal.status === "approved" && goal.approved_at && (
-          <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-3 w-3" />
-            Approved on{" "}
-            {new Date(goal.approved_at).toLocaleDateString("en-IN", {
-              day: "numeric",
-              month: "short",
-              year: "numeric",
-            })}
+        {goal.status === "revision_requested" && (
+          <div className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-2.5 dark:border-violet-800/40 dark:bg-violet-900/10">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-violet-700 dark:text-violet-400 mb-1">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Revision Instructions
+            </div>
+            {goal.rejected_reason && (
+              <p className="text-xs text-violet-700 dark:text-violet-400 leading-relaxed">
+                {goal.rejected_reason}
+              </p>
+            )}
+            {goal.review_comment && (
+              <p className="mt-1 text-xs text-violet-600/80 dark:text-violet-400/80 leading-relaxed border-t border-violet-200/60 dark:border-violet-700/40 pt-1.5">
+                {goal.review_comment}
+              </p>
+            )}
+            {goal.reviewed_at && (
+              <p className="mt-1 text-xs text-violet-600/70 dark:text-violet-500/70">
+                Requested on{" "}
+                {new Date(goal.reviewed_at).toLocaleDateString("en-IN", {
+                  day: "numeric", month: "short", year: "numeric",
+                })}
+              </p>
+            )}
+          </div>
+        )}
+
+        {goal.status === "rejected" && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 dark:border-red-800/40 dark:bg-red-900/10">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-400 mb-1">
+              <XCircle className="h-3.5 w-3.5" />
+              Rejection Reason
+            </div>
+            {goal.rejected_reason && (
+              <p className="text-xs text-red-700 dark:text-red-400 leading-relaxed">
+                {goal.rejected_reason}
+              </p>
+            )}
+            {goal.review_comment && (
+              <p className="mt-1 text-xs text-red-600/80 dark:text-red-400/80 leading-relaxed border-t border-red-200/60 dark:border-red-700/40 pt-1.5">
+                {goal.review_comment}
+              </p>
+            )}
+            {goal.reviewed_at && (
+              <p className="mt-1 text-xs text-red-600/70 dark:text-red-500/70">
+                Rejected on{" "}
+                {new Date(goal.reviewed_at).toLocaleDateString("en-IN", {
+                  day: "numeric", month: "short", year: "numeric",
+                })}
+              </p>
+            )}
           </div>
         )}
       </div>

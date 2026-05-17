@@ -9,6 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { QuarterlyCheckin, QuarterLabel, NormalizedGoal } from "@/types";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+import { Target, TrendingUp } from "lucide-react";
+import { UOM_LABELS } from "@/features/goals/utils/uom";
 
 interface CheckinFormProps {
   goal: NormalizedGoal;
@@ -37,7 +40,21 @@ export function CheckinForm({ goal, existingCheckin, quarter, onSubmit, isSubmit
         <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2 mb-4 pb-3 border-b">
           <div>
             <h4 className="font-semibold text-lg">{goal.title}</h4>
-            {goal.description && <p className="text-sm text-muted-foreground mt-1">{goal.description}</p>}
+            {goal.description && <p className="text-sm text-muted-foreground mt-1 mb-3">{goal.description}</p>}
+            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground mt-2">
+              <div className="flex items-center gap-1.5">
+                <Target className="w-4 h-4" />
+                <span>
+                  Target: <span className="font-medium text-foreground">{goal.target_value ?? "N/A"}</span> {UOM_LABELS[goal.uom_type] || goal.uom_type}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="w-4 h-4" />
+                <span>
+                  Achievement: <span className="font-medium text-foreground">{goal.achievement_value ?? "0"}</span> {UOM_LABELS[goal.uom_type] || goal.uom_type}
+                </span>
+              </div>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant="secondary">Weightage: {goal.weightage}%</Badge>
@@ -47,6 +64,14 @@ export function CheckinForm({ goal, existingCheckin, quarter, onSubmit, isSubmit
               </Badge>
             )}
           </div>
+        </div>
+        
+        <div className="mb-6 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="font-medium text-foreground">Current Progress</span>
+            <span className="font-bold text-primary">{form.watch("progressPct") || 0}%</span>
+          </div>
+          <Progress value={form.watch("progressPct") || 0} className="h-2" />
         </div>
         
         <div className="grid gap-6 md:grid-cols-2">

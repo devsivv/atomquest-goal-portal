@@ -11,6 +11,8 @@ import { showToast } from "@/lib/toast";
 import { Loader2, AlertCircle, ChevronDown, ChevronRight, Filter as FilterIcon, Users, SearchX } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { determineGoalHealth } from "../../utils/health";
+import { ManagerAnalyticsSection } from "./analytics/ManagerAnalyticsSection";
 
 import { SearchInput } from "@/components/ui/search-input";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -117,12 +119,21 @@ export function ManagerQuarterlyDashboard({ managerId, cycleId }: ManagerQuarter
   let totalAwaitingReview = 0;
   let totalAcknowledged = 0;
   let totalDrafts = 0;
+  let totalStalled = 0;
+  let totalAtRisk = 0;
 
   teamStates.forEach(member => {
     totalTeamGoals += member.totalGoals;
     totalAwaitingReview += member.submittedCount;
     totalAcknowledged += member.acknowledgedCount;
     totalDrafts += member.draftCount;
+    
+    member.goals.forEach(goal => {
+      const checkin = member.checkins.find(c => c.goal_id === goal.id);
+      const health = determineGoalHealth(goal, checkin);
+      if (health === "stalled") totalStalled++;
+      if (health === "at_risk") totalAtRisk++;
+    });
   });
 
   return (
@@ -134,31 +145,44 @@ export function ManagerQuarterlyDashboard({ managerId, cycleId }: ManagerQuarter
         </p>
       </div>
 
+      {/* Executive Analytics Section */}
+      <ManagerAnalyticsSection managerId={managerId} cycleId={cycleId} />
+
       <QuarterTabs 
         activeQuarter={activeQuarter} 
         onQuarterChange={setActiveQuarter} 
       />
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <TeamCompletionCard 
           title="Team Goals" 
           value={totalTeamGoals} 
-          subtext="Total approved goals tracking this quarter" 
+          subtext="Total goals" 
         />
         <TeamCompletionCard 
           title="Awaiting Review" 
           value={totalAwaitingReview} 
-          subtext="Submitted check-ins pending your approval" 
+          subtext="Pending approval" 
         />
         <TeamCompletionCard 
           title="Acknowledged" 
           value={totalAcknowledged} 
-          subtext="Check-ins you have reviewed" 
+          subtext="Reviewed check-ins" 
         />
         <TeamCompletionCard 
           title="Drafts / Pending" 
           value={totalTeamGoals - totalAwaitingReview - totalAcknowledged} 
-          subtext="Not yet submitted by employees" 
+          subtext="Not submitted" 
+        />
+        <TeamCompletionCard 
+          title="Stalled" 
+          value={totalStalled} 
+          subtext="Zero progress / overdue" 
+        />
+        <TeamCompletionCard 
+          title="At Risk" 
+          value={totalAtRisk} 
+          subtext="Progress lagging" 
         />
       </div>
 
@@ -218,6 +242,15 @@ export function ManagerQuarterlyDashboard({ managerId, cycleId }: ManagerQuarter
               const isExpanded = expandedProfiles.has(member.profileId);
               const initials = member.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
               
+              let memberStalled = 0;
+              let memberAtRisk = 0;
+              member.goals.forEach(goal => {
+                const checkin = member.checkins.find(c => c.goal_id === goal.id);
+                const health = determineGoalHealth(goal, checkin);
+                if (health === "stalled") memberStalled++;
+                if (health === "at_risk") memberAtRisk++;
+              });
+              
               return (
                 <div key={member.profileId} className="border rounded-lg bg-card shadow-sm overflow-hidden">
                   {/* Header Row */}
@@ -240,6 +273,16 @@ export function ManagerQuarterlyDashboard({ managerId, cycleId }: ManagerQuarter
                       <div className="hidden sm:flex flex-col items-end">
                         <span className="text-muted-foreground">Status</span>
                         <div className="flex gap-2 mt-1">
+                          {memberStalled > 0 && (
+                            <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20">
+                              {memberStalled} stalled
+                            </Badge>
+                          )}
+                          {memberAtRisk > 0 && (
+                            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 hover:bg-amber-500/20 border-amber-500/20 dark:text-amber-400">
+                              {memberAtRisk} at risk
+                            </Badge>
+                          )}
                           {member.submittedCount > 0 && (
                             <Badge variant="secondary" className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
                               {member.submittedCount} to review

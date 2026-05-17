@@ -36,6 +36,8 @@ export interface NormalizedGoal extends BaseEntity {
   approved_by: string | null;
   approved_at: string | null;
   rejected_reason: string | null;
+  /** Manager's optional comment/feedback stored at review time (maps to DB: review_comment). */
+  review_comment: string | null;
 
   is_locked: boolean;
   is_shared: boolean;

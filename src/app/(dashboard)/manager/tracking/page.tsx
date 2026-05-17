@@ -16,12 +16,26 @@ export default async function ManagerTrackingPage() {
     redirect("/login");
   }
 
-  // Find the active cycle to pass to the dashboard
-  const { data: cycle } = await supabase
-    .from("performance_cycles")
-    .select("id")
-    .eq("status", "active")
-    .single();
+  // Find the active cycle robustly
+  const { data: cycles, error: cycleError } = await supabase
+    .from("goal_cycles")
+    .select("id, status, is_default")
+    .or("status.eq.active,is_default.eq.true")
+    .order("is_default", { ascending: false })
+    .limit(1);
+
+  const cycle = cycles?.[0] || null;
+
+  console.log("[ManagerTrackingPage] Cycle resolution:", {
+    found: !!cycle,
+    cycleId: cycle?.id,
+    rawCyclesLength: cycles?.length,
+    error: cycleError?.message
+  });
+
+  if (cycleError) {
+    console.error("[ManagerTrackingPage] Active cycle fetch error:", cycleError);
+  }
 
   if (!cycle) {
     return (

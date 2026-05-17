@@ -55,6 +55,7 @@ import { GoalTrackerBanner } from "./GoalTrackerBanner";
 import { GoalFormArray } from "./GoalFormArray";
 import { AutosaveIndicator, type AutosaveState } from "./AutosaveIndicator";
 import { GoalStatusView } from "./GoalStatusView";
+import { isModeEditable } from "@/features/goals/utils/editability";
 
 // ─── Supabase client singleton (outside component avoids re-creation) ─────────
 const supabaseClient = createClient();
@@ -110,14 +111,25 @@ function goalsToDraftPayload(goals: NormalizedGoal[]): GoalDraftPayload[] {
 
 function detectMode(goals: NormalizedGoal[]): GoalMode {
   if (goals.length === 0) return "empty";
+
+  // Relational rows (submitted/approved/revision/rejected) take strict
+  // priority over the draft anchor. A draft_content JSONB anchor coexists
+  // in the DB during submission but must never mask the real workflow state.
+  const relational = goals.filter((g) => g.status !== "draft");
+
+  if (relational.length > 0) {
+    const statuses = relational.map((g) => g.status);
+    if (statuses.some((s) => s === "approved"))                          return "approved";
+    if (statuses.some((s) => s === "revision_requested"))                return "revision";
+    if (statuses.some((s) => s === "submitted" || s === "under_review")) return "submitted";
+    if (statuses.some((s) => s === "rejected"))                          return "rejected";
+  }
+
+  // Fall back to draft anchor only when no relational rows exist
   if (goals.some((g) => g.draft_content !== null)) return "drafting";
 
-  const statuses = goals.map((g) => g.status);
-  if (statuses.every((s) => s === "approved"))                         return "approved";
-  if (statuses.every((s) => s === "submitted" || s === "under_review")) return "submitted";
-  if (statuses.some((s)  => s === "revision_requested"))               return "revision";
-  if (statuses.every((s) => s === "rejected"))                         return "rejected";
-  return "submitted";
+  return "empty";
+
 }
 
 function buildOptimisticGoals(
@@ -351,7 +363,8 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
   // canSubmit only gates the button — strict validation runs on click.
   const watchedGoals    = watch("goals");
   const totalWeightage  = watchedGoals.reduce((s, g) => s + (Number(g.weightage) || 0), 0);
-  const canSubmit       = watchedGoals.length > 0 && totalWeightage === 100 && !isSubmitting;
+  const isEditable      = isModeEditable(mode);
+  const canSubmit       = isEditable && watchedGoals.length > 0 && totalWeightage === 100 && !isSubmitting;
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
@@ -409,7 +422,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
         {/* so we can run two-stage validation without the resolver blocking */}
         <div className="space-y-8">
           <GoalTrackerBanner />
-          <GoalFormArray />
+          <GoalFormArray disabled={!isEditable} />
 
           <div className="flex justify-end border-t pt-6">
             <Button

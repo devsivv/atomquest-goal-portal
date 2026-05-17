@@ -195,6 +195,7 @@ export function TeamMemberReviewPanel({
               <GoalReviewCard
                 key={goal.id}
                 goal={goal}
+                employeeName={group.fullName}
                 onApprove={onApprove}
                 onReject={onReject}
                 onRevise={onRevise}

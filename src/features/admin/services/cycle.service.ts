@@ -7,7 +7,7 @@ export const CycleService = {
    */
   async getAll(client: SupabaseClient): Promise<PerformanceCycle[]> {
     const { data, error } = await client
-      .from("performance_cycles")
+      .from("goal_cycles")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -20,7 +20,7 @@ export const CycleService = {
    */
   async getByIdWithWindows(client: SupabaseClient, id: string): Promise<CycleWithWindows | null> {
     const { data, error } = await client
-      .from("performance_cycles")
+      .from("goal_cycles")
       .select(`
         *,
         windows:cycle_windows(*)
@@ -53,7 +53,7 @@ export const CycleService = {
   ): Promise<CycleWithWindows> {
     // 1. Insert cycle
     const { data: cycle, error: cycleError } = await client
-      .from("performance_cycles")
+      .from("goal_cycles")
       .insert([cycleData])
       .select()
       .single();
@@ -95,7 +95,7 @@ export const CycleService = {
    */
   async archiveCycle(client: SupabaseClient, cycleId: string): Promise<void> {
     const { error } = await client
-      .from("performance_cycles")
+      .from("goal_cycles")
       .update({ status: 'archived' })
       .eq("id", cycleId);
 
