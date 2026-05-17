@@ -11,6 +11,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2, MailOpen } from "lucide-react";
 import Link from "next/link";
+import { toast } from "sonner";
 
 import { registerSchema, type RegisterInput } from "../types/auth.schema";
 import { registerAction } from "../actions/auth.actions";
@@ -55,6 +56,7 @@ export function RegisterForm() {
       } else if (result?.verificationRequired) {
         setVerificationRequired(true);
         setRegisteredEmail(result.email || values.email);
+        toast.success("Please check your email for confirmation.");
       }
     });
   }
