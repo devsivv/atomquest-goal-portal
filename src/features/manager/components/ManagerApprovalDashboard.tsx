@@ -24,6 +24,12 @@ import {
 } from "./ApprovalActionModal";
 
 import { managerService } from "../services/manager.service";
+import {
+  approveGoalAction,
+  rejectGoalAction,
+  requestRevisionAction,
+  approveAllGoalsAction,
+} from "../actions/manager.actions";
 import type { TeamMemberGoalGroup } from "../types/manager.types";
 import type { NormalizedGoal } from "@/types";
 
@@ -149,7 +155,8 @@ export function ManagerApprovalDashboard({
       startTransition(async () => {
         try {
           if (action === "approve") {
-            await managerService.approveGoal(client, goalId);
+            const res = await approveGoalAction(goalId);
+            if (!res.success) throw new Error(res.error);
 
             const targetGoal = groups
               .flatMap((g) => g.goals)
@@ -167,22 +174,22 @@ export function ManagerApprovalDashboard({
 
             showToast.success({ title: "Goal approved and locked successfully." });
           } else if (action === "reject") {
-            const updated = await managerService.rejectGoal(
-              client,
+            const res = await rejectGoalAction(
               goalId,
               managerId,
               reason ?? "No reason provided."
             );
-            applyOptimisticGoalUpdate(updated);
+            if (!res.success) throw new Error(res.error);
+            applyOptimisticGoalUpdate(res.updated!);
             showToast.info({ title: "Goal rejected. Employee will be notified." });
           } else {
-            const updated = await managerService.requestRevision(
-              client,
+            const res = await requestRevisionAction(
               goalId,
               managerId,
               reason ?? "Please revise your goal."
             );
-            applyOptimisticGoalUpdate(updated);
+            if (!res.success) throw new Error(res.error);
+            applyOptimisticGoalUpdate(res.updated!);
             showToast.success({ title: "Revision requested." });
           }
 
@@ -195,7 +202,7 @@ export function ManagerApprovalDashboard({
         }
       });
     },
-    [groups, client, managerId, applyOptimisticGoalUpdate]
+    [groups, managerId, applyOptimisticGoalUpdate]
   );
 
   // ─── Bulk approval ────────────────────────────────────────────────────────
@@ -204,11 +211,8 @@ export function ManagerApprovalDashboard({
     (profileId: string) => {
       startTransition(async () => {
         try {
-          await managerService.approveAllGoalsForEmployee(
-            client,
-            profileId,
-            cycleId
-          );
+          const res = await approveAllGoalsAction(profileId, cycleId);
+          if (!res.success) throw new Error(res.error);
 
           applyBulkApproveOptimistic(profileId);
           showToast.success({ title: "All goals approved successfully." });
@@ -220,7 +224,7 @@ export function ManagerApprovalDashboard({
         }
       });
     },
-    [client, cycleId, applyBulkApproveOptimistic]
+    [cycleId, applyBulkApproveOptimistic]
   );
 
   // ─── Search & Filter Logic ────────────────────────────────────────────────

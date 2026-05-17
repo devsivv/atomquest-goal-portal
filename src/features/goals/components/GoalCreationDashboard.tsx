@@ -29,6 +29,7 @@ import { Loader2, PenLine } from "lucide-react";
 
 import { goalCollectionSchema } from "@/features/goals/schemas";
 import { goalsService } from "@/features/goals/services/goals.service";
+import { saveGoalDraftAction, submitGoalsAction } from "@/features/goals/actions/goals.actions";
 import { createClient } from "@/lib/supabase/client";
 import type { GoalDraftPayload } from "@/types/goals";
 import type { NormalizedGoal } from "@/types";
@@ -171,12 +172,12 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
       setAutosaveStatus("saving");
       const timer = setTimeout(async () => {
         try {
-          await goalsService.saveDraft(
-            client,
+          const res = await saveGoalDraftAction(
             profileId,
             cycleId,
             value.goals as GoalDraftPayload[]
           );
+          if (!res.success) throw new Error(res.error);
           setLastSavedAt(new Date());
           setAutosaveStatus("saved");
         } catch {
@@ -196,12 +197,12 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
   const onSubmit = useCallback(
     async (data: FormValues) => {
       try {
-        await goalsService.submitGoals(
-          client,
+        const res = await submitGoalsAction(
           profileId,
           cycleId,
           data.goals as any
         );
+        if (!res.success) throw new Error(res.error);
 
         showToast.success({ title: "Goals submitted successfully for manager review!" });
 
