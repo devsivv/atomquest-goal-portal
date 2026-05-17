@@ -1,9 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { authService } from "@/features/auth/services/auth.service";
 import { goalsService } from "@/features/goals/services/goals.service";
-import { ROUTES } from "@/constants";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -27,19 +25,50 @@ export const metadata: Metadata = {
 };
 
 export default async function EmployeeDashboardPage() {
-  const profile = await authService.getCurrentProfile();
-  if (!profile) redirect(ROUTES.LOGIN);
-
   const supabase = await createClient();
-  const { data: activeCycle } = await supabase
+  
+  // Call getUser() to verify session and set Authorization header for subsequent RLS queries
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    console.error("[EmployeeDashboard] Auth error or no user found:", authError);
+    redirect("/login");
+  }
+
+  console.log("[EmployeeDashboard] Logged in user ID:", user.id);
+
+  // Fetch profile
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("id", user.id)
+    .single();
+
+  if (profileError || !profile) {
+    console.error("[EmployeeDashboard] Profile fetch error:", profileError);
+    redirect("/login");
+  }
+
+  console.log("[EmployeeDashboard] Profile name:", profile.full_name);
+
+  // Fetch active default cycle
+  const { data: activeCycle, error: cycleError } = await supabase
     .from("goal_cycles")
     .select("id, name, start_date, end_date")
     .eq("is_default", true)
     .single();
 
+  if (cycleError) {
+    console.error("[EmployeeDashboard] Active cycle fetch error:", cycleError);
+  }
+
+  console.log("[EmployeeDashboard] Active cycle:", activeCycle);
+
+  // Fetch goals for active cycle
   const rawGoals = activeCycle
     ? await goalsService.getEmployeeGoalsForCycle(supabase, profile.id, activeCycle.id)
     : [];
+
+  console.log(`[EmployeeDashboard] Scoped raw goals fetched: ${rawGoals.length}`);
 
   // Parse draft goals if currently in drafting phase (JSONB anchor has draft_content)
   const hasDraft = rawGoals.some((g) => g.draft_content !== null);
@@ -48,6 +77,7 @@ export default async function EmployeeDashboardPage() {
   if (hasDraft) {
     const anchor = rawGoals.find((g) => g.draft_content !== null);
     const draftPayloads = (anchor?.draft_content as any) ?? [];
+    console.log(`[EmployeeDashboard] Anchor draft found with ${draftPayloads.length} items`);
     goalsList = draftPayloads.map((dg: any, idx: number) => ({
       id: `draft-${idx}`,
       profile_id: profile.id,
@@ -66,6 +96,8 @@ export default async function EmployeeDashboardPage() {
       updated_at: anchor?.updated_at || new Date().toISOString(),
     }));
   }
+
+  console.log(`[EmployeeDashboard] Final parsed goals count: ${goalsList.length}`);
 
   // Calculate statistics
   const totalGoals = goalsList.length;
