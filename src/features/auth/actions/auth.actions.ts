@@ -46,7 +46,7 @@ export async function registerAction(data: RegisterInput) {
 
   const supabase = await createClient();
 
-  const { error } = await supabase.auth.signUp({
+  const { data: signUpData, error } = await supabase.auth.signUp({
     email: result.data.email,
     password: result.data.password,
     options: {
@@ -62,6 +62,13 @@ export async function registerAction(data: RegisterInput) {
 
   if (error) {
     return { error: error.message };
+  }
+
+  // If email confirmation is enabled, we won't have an active verified session
+  if (!signUpData.session || !signUpData.user?.email_confirmed_at) {
+    // Explicitly sign out to clean any temporary unverified session cookies
+    await supabase.auth.signOut();
+    return { success: true, verificationRequired: true, email: result.data.email };
   }
 
   // Same logic as login for consistency (though a new user is always an employee)

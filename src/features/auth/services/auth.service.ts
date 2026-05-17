@@ -15,6 +15,12 @@ export const authService = {
     if (error || !user) {
       return null;
     }
+
+    // Ensure email verification is confirmed before returning user
+    if (!user.email_confirmed_at) {
+      return null;
+    }
+    
     return user;
   },
 

@@ -9,7 +9,8 @@
 import { useState, useTransition } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2, MailOpen } from "lucide-react";
+import Link from "next/link";
 
 import { registerSchema, type RegisterInput } from "../types/auth.schema";
 import { registerAction } from "../actions/auth.actions";
@@ -29,6 +30,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export function RegisterForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [verificationRequired, setVerificationRequired] = useState(false);
+  const [registeredEmail, setRegisteredEmail] = useState("");
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(registerSchema),
@@ -49,8 +52,41 @@ export function RegisterForm() {
       const result = await registerAction(values);
       if (result?.error) {
         setError(result.error);
+      } else if (result?.verificationRequired) {
+        setVerificationRequired(true);
+        setRegisteredEmail(result.email || values.email);
       }
     });
+  }
+
+  if (verificationRequired) {
+    return (
+      <div className="flex flex-col items-center justify-center text-center space-y-6 py-6 animate-in fade-in duration-500">
+        <div className="relative flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 border border-primary/20">
+          <MailOpen className="h-8 w-8 text-primary animate-pulse" />
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-primary"></span>
+          </span>
+        </div>
+        <div className="space-y-2">
+          <h2 className="text-xl font-bold tracking-tight text-foreground">
+            Check your email
+          </h2>
+          <p className="text-sm text-muted-foreground max-w-sm leading-relaxed">
+            We sent a verification link to <span className="font-semibold text-foreground">{registeredEmail}</span>. 
+            Please check your inbox and spam folders, and click the link to activate your account.
+          </p>
+        </div>
+        <div className="pt-2 w-full">
+          <Button asChild variant="outline" className="w-full shadow-sm bg-background/50 hover:bg-background">
+            <Link href="/login">
+              Back to Sign In
+            </Link>
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (

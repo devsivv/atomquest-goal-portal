@@ -5,10 +5,11 @@
  * @description Enterprise-grade Login form with React Hook Form, Zod, and shadcn/ui.
  */
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 import { loginSchema, type LoginInput } from "../types/auth.schema";
 import { loginAction } from "../actions/auth.actions";
@@ -28,6 +29,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 export function LoginForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const searchParams = useSearchParams();
 
   const form = useForm<LoginInput>({
     resolver: zodResolver(loginSchema),
@@ -37,8 +40,16 @@ export function LoginForm() {
     },
   });
 
+  useEffect(() => {
+    const errorParam = searchParams.get("error");
+    if (errorParam === "unverified") {
+      setInfoMessage("Verification Required: Please check your email and click the confirmation link to activate your account.");
+    }
+  }, [searchParams]);
+
   function onSubmit(values: LoginInput) {
     setError(null);
+    setInfoMessage(null);
     startTransition(async () => {
       const result = await loginAction(values);
       if (result?.error) {
@@ -55,6 +66,13 @@ export function LoginForm() {
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {infoMessage && (
+            <Alert className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/25">
+              <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              <AlertDescription>{infoMessage}</AlertDescription>
             </Alert>
           )}
 

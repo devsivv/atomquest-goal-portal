@@ -60,8 +60,18 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  // Redirect authenticated users away from auth pages
-  if (user && (pathname === "/login" || pathname === "/register")) {
+  // Protect all dashboard routes (/employee, /manager, /admin) from unverified users
+  if (user && !user.email_confirmed_at && !isPublicRoute(pathname)) {
+    // Force clear the unverified cookies on the response
+    await supabase.auth.signOut();
+    const loginUrl = request.nextUrl.clone();
+    loginUrl.pathname = "/login";
+    loginUrl.searchParams.set("error", "unverified");
+    return NextResponse.redirect(loginUrl);
+  }
+
+  // Redirect verified authenticated users away from auth pages
+  if (user && user.email_confirmed_at && (pathname === "/login" || pathname === "/register")) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/";
     return NextResponse.redirect(redirectUrl);
