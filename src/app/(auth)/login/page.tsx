@@ -5,7 +5,7 @@ import { LoginForm } from "@/features/auth/components/LoginForm";
 
 export const metadata: Metadata = {
   title: "Login",
-  description: "Sign in to your AtomQuest account.",
+  description: "Sign in to your Quartiq account.",
 };
 
 export default function LoginPage() {
@@ -15,7 +15,7 @@ export default function LoginPage() {
         {/* Header */}
         <div className="text-center">
           <h1 className="text-3xl font-bold tracking-tight">
-            Sign in to AtomQuest
+            Sign in to Quartiq
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Track and achieve your goals at scale

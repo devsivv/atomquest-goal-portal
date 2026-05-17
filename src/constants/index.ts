@@ -3,7 +3,7 @@
  * @description App-wide constants. Import with: import { ROUTES } from "@/constants"
  */
 
-export const APP_NAME = "AtomQuest" as const;
+export const APP_NAME = "Quartiq" as const;
 export const APP_DESCRIPTION = "Enterprise Goal Tracking Portal" as const;
 
 /** Type-safe route map — always use this instead of hard-coding strings */

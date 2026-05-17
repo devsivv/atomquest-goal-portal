@@ -1,7 +1,7 @@
 "use client";
 
 import { useFieldArray, useFormContext } from "react-hook-form";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, Target } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -36,16 +36,22 @@ export function GoalFormArray() {
       ))}
 
       {fields.length === 0 && (
-        <div className="rounded-lg border-2 border-dashed bg-muted/20 p-12 text-center">
-          <p className="mb-4 text-muted-foreground">
-            No goals added yet. Start planning your cycle!
+        <div className="rounded-2xl border-2 border-dashed bg-muted/20 p-12 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 mb-4">
+            <Target className="h-8 w-8 text-primary" />
+          </div>
+          <h3 className="text-xl font-semibold mb-2">No goals planned</h3>
+          <p className="mb-6 text-muted-foreground max-w-sm mx-auto">
+            You haven't added any goals for this cycle yet. Start defining your objectives to track your progress.
           </p>
 
           <Button
             type="button"
             onClick={() => append({ ...DEFAULT_GOAL })}
+            size="lg"
+            className="shadow-sm"
           >
-            <PlusCircle className="mr-2 h-4 w-4" />
+            <PlusCircle className="mr-2 h-5 w-5" />
             Add Your First Goal
           </Button>
         </div>

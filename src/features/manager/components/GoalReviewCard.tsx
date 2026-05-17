@@ -52,7 +52,7 @@ export function GoalReviewCard({
   void isRevision; // reserved for future revision-state UI
 
   return (
-    <div className="group relative rounded-xl border bg-card shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20 overflow-hidden">
+    <div className="group relative rounded-xl border bg-card shadow-sm transition-all duration-300 ease-out hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 overflow-hidden">
       {/* Accent strip */}
       <div
         className={`absolute left-0 top-0 h-full w-1 transition-colors ${statusCfg.dot}`}

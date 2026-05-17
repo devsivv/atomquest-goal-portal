@@ -39,7 +39,7 @@ export function GoalTrackerBanner() {
   const hasRootError = formState.errors.goals?.root?.message;
 
   return (
-    <Card className="sticky top-4 z-10 bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b-4 border-b-primary/20">
+    <Card className="sticky top-4 z-10 bg-background/95 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b-4 border-b-primary/20 transition-all duration-300 hover:shadow-md">
       <CardContent className="flex flex-col items-center justify-between gap-4 p-4 md:flex-row">
         
         {/* Count Tracker */}
@@ -55,7 +55,7 @@ export function GoalTrackerBanner() {
         {/* Weightage Tracker */}
         <div className="w-full flex-1 space-y-2 max-w-md">
           <div className="flex justify-between text-sm font-medium">
-            <span className={isOverWeightage ? "text-destructive" : isUnderWeightage ? "text-yellow-600" : "text-green-600"}>
+            <span className={isOverWeightage ? "text-destructive" : isUnderWeightage ? "text-yellow-600 dark:text-yellow-500" : "text-emerald-600 dark:text-emerald-500"}>
               Total Weightage: {totalWeightage}%
             </span>
             <span className="text-muted-foreground">{weightageMessage}</span>

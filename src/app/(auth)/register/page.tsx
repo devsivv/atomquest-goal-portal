@@ -5,7 +5,7 @@ import { RegisterForm } from "@/features/auth/components/RegisterForm";
 
 export const metadata: Metadata = {
   title: "Register",
-  description: "Create your AtomQuest account.",
+  description: "Create your Quartiq account.",
 };
 
 export default function RegisterPage() {

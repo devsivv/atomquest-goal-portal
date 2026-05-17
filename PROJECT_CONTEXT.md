@@ -1,7 +1,7 @@
-# Project Context: AtomQuest Enterprise Goal Portal
+# Project Context: Quartiq Enterprise Goal Portal
 
 ## 1. Project Overview
-AtomQuest is an enterprise-grade performance management platform designed for structured goal setting, tracking, and manager approval workflows. The system prioritizes strict business rules (BRD compliance) while offering a seamless "autosave-first" user experience.
+Quartiq is an enterprise-grade performance management platform designed for structured goal setting, tracking, and manager approval workflows. The system prioritizes strict business rules (BRD compliance) while offering a seamless "autosave-first" user experience.
 
 ## 2. Technology Stack
 - **Framework**: Next.js 16 (App Router)

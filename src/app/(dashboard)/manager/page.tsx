@@ -20,7 +20,7 @@ import { ManagerApprovalDashboard } from "@/features/manager/components";
 import { ROUTES } from "@/constants";
 
 export const metadata: Metadata = {
-  title: "Team Goal Review — AtomQuest",
+  title: "Team Goal Review — Quartiq",
   description:
     "Review, approve, and manage your team's submitted performance goals.",
 };

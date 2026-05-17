@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "Employee Dashboard",
-  description: "Your AtomQuest goal tracking overview.",
+  description: "Your Quartiq goal tracking overview.",
 };
 
 export default function EmployeeDashboardPage() {

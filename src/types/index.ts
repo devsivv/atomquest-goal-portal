@@ -7,3 +7,6 @@
 export * from "./api.types";
 export * from "./common.types";
 export * from "./goals";
+export * from "./org";
+export * from "./analytics";
+export * from "./audit";

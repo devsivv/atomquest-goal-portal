@@ -9,13 +9,13 @@ const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: {
-    default: "AtomQuest — Goal Tracking Portal",
-    template: "%s | AtomQuest",
+    default: "Quartiq — Goal Tracking Portal",
+    template: "%s | Quartiq",
   },
   description:
     "Enterprise goal tracking and management portal. Set, track, and achieve goals at scale.",
   keywords: ["goal tracking", "OKR", "productivity", "enterprise"],
-  authors: [{ name: "AtomQuest Team" }],
+  authors: [{ name: "Quartiq Team" }],
   robots: {
     index: false, // Private app — don't index
     follow: false,

@@ -12,8 +12,8 @@
  */
 
 import { useState, useTransition, useCallback, useMemo } from "react";
-import { toast } from "sonner";
-import { RefreshCw, ClipboardList } from "lucide-react";
+import { showToast } from "@/lib/toast";
+import { RefreshCw, ClipboardList, Filter, Inbox, SearchX } from "lucide-react";
 import { createBrowserClient } from "@supabase/ssr";
 
 import { ManagerStatsBanner } from "./ManagerStatsBanner";
@@ -26,6 +26,16 @@ import {
 import { managerService } from "../services/manager.service";
 import type { TeamMemberGoalGroup } from "../types/manager.types";
 import type { NormalizedGoal } from "@/types";
+
+import { SearchInput } from "@/components/ui/search-input";
+import { useDebounce } from "@/hooks/useDebounce";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +58,11 @@ export function ManagerApprovalDashboard({
   // Optimistic local copy — starts from server-fetched data.
   const [groups, setGroups] = useState<TeamMemberGoalGroup[]>(initialGroups);
 
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const debouncedQuery = useDebounce(searchQuery, 300);
+  const [statusFilter, setStatusFilter] = useState("all");
+
   // Modal state.
   const [modalGoal, setModalGoal] = useState<NormalizedGoal | null>(null);
   const [modalAction, setModalAction] = useState<ApprovalAction | null>(null);
@@ -66,7 +81,6 @@ export function ManagerApprovalDashboard({
 
   // ─── Optimistic update helpers ────────────────────────────────────────────
 
-  /** Patch a single goal in local state after a mutation. */
   const applyOptimisticGoalUpdate = useCallback((updated: NormalizedGoal) => {
     setGroups((prev) =>
       prev.map((group) => {
@@ -90,7 +104,6 @@ export function ManagerApprovalDashboard({
     );
   }, []);
 
-  /** Mark all pending goals for a profile as approved in local state. */
   const applyBulkApproveOptimistic = useCallback(
     (profileId: string) => {
       const now = new Date().toISOString();
@@ -136,10 +149,8 @@ export function ManagerApprovalDashboard({
       startTransition(async () => {
         try {
           if (action === "approve") {
-            // approveGoal: (client, goalId, comment?) — no managerId
             await managerService.approveGoal(client, goalId);
 
-            // Optimistic patch: find the goal and mark it approved.
             const targetGoal = groups
               .flatMap((g) => g.goals)
               .find((g) => g.id === goalId);
@@ -154,9 +165,8 @@ export function ManagerApprovalDashboard({
               } as NormalizedGoal);
             }
 
-            toast.success("Goal approved and locked successfully.");
+            showToast.success({ title: "Goal approved and locked successfully." });
           } else if (action === "reject") {
-            // rejectGoal: (client, goalId, managerId, reason, comment?)
             const updated = await managerService.rejectGoal(
               client,
               goalId,
@@ -164,9 +174,8 @@ export function ManagerApprovalDashboard({
               reason ?? "No reason provided."
             );
             applyOptimisticGoalUpdate(updated);
-            toast.info("Goal rejected. Employee will be notified.");
+            showToast.info({ title: "Goal rejected. Employee will be notified." });
           } else {
-            // requestRevision: (client, goalId, managerId, reason, comment?)
             const updated = await managerService.requestRevision(
               client,
               goalId,
@@ -174,15 +183,15 @@ export function ManagerApprovalDashboard({
               reason ?? "Please revise your goal."
             );
             applyOptimisticGoalUpdate(updated);
-            toast.success("Revision requested.");
+            showToast.success({ title: "Revision requested." });
           }
 
           closeModal();
         } catch (error) {
           console.error(error);
-          toast.error(
-            error instanceof Error ? error.message : "Action failed. Please retry."
-          );
+          showToast.error({
+            title: error instanceof Error ? error.message : "Action failed. Please retry.",
+          });
         }
       });
     },
@@ -195,7 +204,6 @@ export function ManagerApprovalDashboard({
     (profileId: string) => {
       startTransition(async () => {
         try {
-          // approveAllGoalsForEmployee: (client, profileId, cycleId) — no managerId
           await managerService.approveAllGoalsForEmployee(
             client,
             profileId,
@@ -203,17 +211,60 @@ export function ManagerApprovalDashboard({
           );
 
           applyBulkApproveOptimistic(profileId);
-          toast.success("All goals approved successfully.");
+          showToast.success({ title: "All goals approved successfully." });
         } catch (error) {
           console.error(error);
-          toast.error(
-            error instanceof Error ? error.message : "Bulk approval failed."
-          );
+          showToast.error({
+            title: error instanceof Error ? error.message : "Bulk approval failed.",
+          });
         }
       });
     },
     [client, cycleId, applyBulkApproveOptimistic]
   );
+
+  // ─── Search & Filter Logic ────────────────────────────────────────────────
+
+  const filteredGroups = useMemo(() => {
+    let result = groups;
+
+    if (debouncedQuery) {
+      const q = debouncedQuery.toLowerCase();
+      result = result
+        .map((group) => {
+          const matchingGoals = group.goals.filter(
+            (g) =>
+              g.title.toLowerCase().includes(q) ||
+              (g.thrust_area && g.thrust_area.toLowerCase().includes(q))
+          );
+          const matchesEmployee = group.fullName.toLowerCase().includes(q);
+          return {
+            ...group,
+            goals: matchesEmployee ? group.goals : matchingGoals,
+          };
+        })
+        .filter(
+          (group) =>
+            group.fullName.toLowerCase().includes(q) || group.goals.length > 0
+        );
+    }
+
+    if (statusFilter !== "all") {
+      result = result
+        .map((group) => ({
+          ...group,
+          goals: group.goals.filter((g) => {
+            if (statusFilter === "pending") {
+              return g.status === "submitted" || g.status === "under_review";
+            }
+            return g.status === statusFilter;
+          }),
+        }))
+        .filter((group) => group.goals.length > 0);
+    }
+
+    return result;
+  }, [groups, debouncedQuery, statusFilter]);
 
   // ─── Computed stats ───────────────────────────────────────────────────────
 
@@ -244,16 +295,54 @@ export function ManagerApprovalDashboard({
       {/* KPI banner */}
       <ManagerStatsBanner stats={stats} />
 
+      {/* Search and Filters */}
+      {!isEmpty && (
+        <div className="flex flex-col sm:flex-row gap-4 items-center bg-card p-4 rounded-xl border shadow-sm">
+          <div className="w-full sm:max-w-md">
+            <SearchInput
+              placeholder="Search by employee or goal title..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onClear={() => setSearchQuery("")}
+            />
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Filter className="h-4 w-4 text-muted-foreground hidden sm:block" />
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="pending">Pending Review</SelectItem>
+                <SelectItem value="approved">Approved</SelectItem>
+                <SelectItem value="revision_requested">Revision Requested</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
       {/* Review queue */}
       {isEmpty ? (
         <EmptyQueue />
+      ) : filteredGroups.length === 0 ? (
+        <div className="py-16 px-6 text-center border-2 border-dashed rounded-2xl bg-muted/20 animate-in fade-in slide-in-from-bottom-2 duration-500">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
+            <SearchX className="h-8 w-8 text-muted-foreground" />
+          </div>
+          <h3 className="text-xl font-semibold mb-2">No Results Found</h3>
+          <p className="text-muted-foreground max-w-md mx-auto">
+            Try adjusting your search query or status filter to find team members.
+          </p>
+        </div>
       ) : (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">
               Review Queue
               <span className="ml-2 text-sm font-normal text-muted-foreground">
-                ({groups.length} team member{groups.length !== 1 ? "s" : ""})
+                ({filteredGroups.length} team member{filteredGroups.length !== 1 ? "s" : ""})
               </span>
             </h2>
             <div className="text-xs text-muted-foreground">
@@ -271,14 +360,14 @@ export function ManagerApprovalDashboard({
           </div>
 
           <div className="space-y-4">
-            {groups.map((group) => (
+            {filteredGroups.map((group) => (
               <TeamMemberReviewPanel
                 key={group.profileId}
                 group={group}
                 onApproveAll={() => handleApproveAll(group.profileId)}
                 onApprove={(goal) => openModal(goal, "approve")}
                 onReject={(goal) => openModal(goal, "reject")}
-                onRevise={(goal) => openModal(goal, "revise")}
+                onRevise={(goal) => openModal(goal, "request_revision")}
                 isPending={isPending}
               />
             ))}
@@ -288,12 +377,10 @@ export function ManagerApprovalDashboard({
 
       {/* Approval action modal */}
       <ApprovalActionModal
-        open={!!modalGoal && !!modalAction}
         action={modalAction}
         goal={modalGoal}
         onClose={closeModal}
         onConfirm={handleConfirm}
-        isPending={isPending}
       />
     </div>
   );
@@ -303,12 +390,12 @@ export function ManagerApprovalDashboard({
 
 function EmptyQueue() {
   return (
-    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-muted/20 py-20 text-center">
+    <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed bg-muted/20 py-20 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
       <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted mb-4">
-        <ClipboardList className="h-8 w-8 text-muted-foreground" />
+        <Inbox className="h-8 w-8 text-muted-foreground" />
       </div>
-      <h3 className="text-lg font-semibold">No Submissions Yet</h3>
-      <p className="mt-1 text-sm text-muted-foreground max-w-sm">
+      <h3 className="text-xl font-semibold mb-1">No Submissions Yet</h3>
+      <p className="mt-2 text-sm text-muted-foreground max-w-sm mx-auto">
         Your team hasn&apos;t submitted any goals for this cycle yet. You&apos;ll
         see their goals here once they submit for review.
       </p>

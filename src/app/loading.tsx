@@ -4,10 +4,14 @@
  * Replace with a skeleton UI that matches your layout for better UX.
  */
 
+import { QuarterlyDashboardSkeleton } from "@/components/ui/dashboard-skeletons";
+
 export default function GlobalLoading() {
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-6xl">
+        <QuarterlyDashboardSkeleton />
+      </div>
     </div>
   );
 }

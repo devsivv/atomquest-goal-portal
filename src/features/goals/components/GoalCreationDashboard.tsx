@@ -24,7 +24,7 @@ import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { showToast } from "@/lib/toast";
 import { Loader2, PenLine } from "lucide-react";
 
 import { goalCollectionSchema } from "@/features/goals/schemas";
@@ -32,6 +32,7 @@ import { goalsService } from "@/features/goals/services/goals.service";
 import { createClient } from "@/lib/supabase/client";
 import type { GoalDraftPayload } from "@/types/goals";
 import type { NormalizedGoal } from "@/types";
+import { GoalCreationSkeleton } from "@/components/ui/dashboard-skeletons";
 
 import { GoalTrackerBanner } from "./GoalTrackerBanner";
 import { GoalFormArray } from "./GoalFormArray";
@@ -141,7 +142,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
         // Pre-populate the RHF form when the employee needs to (re)edit
         if (detectedMode === "drafting") {
           const anchor = goals.find((g) => g.draft_content !== null);
-          const draftGoals = (anchor?.draft_content as GoalDraftPayload[]) ?? [];
+          const draftGoals = (anchor?.draft_content as unknown as GoalDraftPayload[]) ?? [];
           reset({ goals: draftGoals });
         } else if (detectedMode === "revision") {
           // Map real DB rows back to the permissive draft payload for editing
@@ -151,7 +152,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
       } catch (err) {
         if (cancelled) return;
         console.error("GoalCreationDashboard: failed to load goals", err);
-        toast.error("Failed to load your goals. Please refresh.");
+        showToast.error({ title: "Failed to load your goals. Please refresh." });
         setMode("empty"); // safe fallback — allow the employee to start fresh
       }
     }
@@ -202,7 +203,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
           data.goals as any
         );
 
-        toast.success("Goals submitted successfully for manager review!");
+        showToast.success({ title: "Goals submitted successfully for manager review!" });
 
         // Optimistically switch to the submitted view without a full reload
         const refreshed = await goalsService.getEmployeeGoalsForCycle(
@@ -214,9 +215,9 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
         setMode(detectMode(refreshed));
       } catch (error) {
         console.error(error);
-        toast.error(
-          error instanceof Error ? error.message : "Failed to submit goals. Please try again."
-        );
+        showToast.error({
+          title: error instanceof Error ? error.message : "Failed to submit goals. Please try again.",
+        });
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -225,7 +226,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
 
   const onError = (errors: unknown) => {
     console.error("Form validation errors:", errors);
-    toast.error("Please fix the validation errors before submitting.");
+    showToast.error({ title: "Please fix the validation errors before submitting." });
   };
 
   // ─── Re-edit handler (rejected state) ──────────────────────────────────────
@@ -248,12 +249,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
 
   // Loading
   if (mode === "loading") {
-    return (
-      <div className="flex items-center justify-center py-32 text-muted-foreground gap-3">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        <span>Loading your goals…</span>
-      </div>
-    );
+    return <GoalCreationSkeleton />;
   }
 
   // Read-only modes — show GoalStatusView

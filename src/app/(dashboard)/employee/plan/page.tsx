@@ -6,7 +6,7 @@ import { GoalCreationDashboard } from "@/features/goals/components/GoalCreationD
 import { ROUTES } from "@/constants";
 
 export const metadata: Metadata = {
-  title: "Plan Goals | AtomQuest",
+  title: "Plan Goals | Quartiq",
   description: "Plan and submit your enterprise goals for the current cycle.",
 };
 

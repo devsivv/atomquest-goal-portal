@@ -24,7 +24,7 @@ interface StatCardProps {
 
 function StatCard({ label, value, icon: Icon, colorClass, bgClass }: StatCardProps) {
   return (
-    <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm transition-all hover:shadow-md">
+    <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm transition-all duration-300 ease-out hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
