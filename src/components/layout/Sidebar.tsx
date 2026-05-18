@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { employeeNavigation, managerNavigation } from "@/config/navigation";
+import { employeeNavigation, managerNavigation, adminNavigation } from "@/config/navigation";
 import { useMemo } from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Atom, Menu, X } from "lucide-react";
@@ -21,7 +21,14 @@ export function Sidebar({ role, className, onNavigate, isCollapsed = false, onTo
   const pathname = usePathname();
 
   const navItems = useMemo(() => {
-    if (role === "manager" || role === "admin") {
+    if (role === "admin") {
+      return [
+        { label: "Admin Workspace", items: adminNavigation },
+        { label: "Manager Workspace", items: managerNavigation },
+        { label: "Employee Workspace", items: employeeNavigation },
+      ];
+    }
+    if (role === "manager") {
       return [
         { label: "Manager Workspace", items: managerNavigation },
         { label: "Employee Workspace", items: employeeNavigation },

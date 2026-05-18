@@ -7,7 +7,7 @@
  * Supports bulk-approve when all goals are pending.
  */
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import {
   ChevronDown,
   ChevronUp,
@@ -40,7 +40,7 @@ interface TeamMemberReviewPanelProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function TeamMemberReviewPanel({
+export const TeamMemberReviewPanel = memo(function TeamMemberReviewPanel({
   group,
   onApprove,
   onReject,
@@ -164,11 +164,11 @@ export function TeamMemberReviewPanel({
       {isExpanded && (
         <div className="px-5 py-4 space-y-3 animate-in slide-in-from-top-2 duration-200">
           {/* Bulk Approve CTA */}
-          {allPending && totalGoals > 1 && (
+          {pendingCount >= 2 && (
             <div className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 dark:border-emerald-800/40 dark:bg-emerald-900/10">
               <div className="text-sm">
                 <p className="font-medium text-emerald-800 dark:text-emerald-300">
-                  Approve all {totalGoals} goals at once?
+                  Approve all {pendingCount} pending goals at once?
                 </p>
                 <p className="text-xs text-emerald-600/80 dark:text-emerald-400/70 mt-0.5">
                   Total weightage: {group.totalWeightage}%
@@ -214,4 +214,4 @@ export function TeamMemberReviewPanel({
       )}
     </div>
   );
-}
+});

@@ -51,7 +51,10 @@ export default async function ManagerDashboardPage() {
     try {
       teamGroups = await managerService.getTeamSubmittedGoals(
         supabase,
-        activeCycle.id
+        activeCycle.id,
+        // Filter to this manager's direct reports only.
+        // Admins see all teams (no manager_id filter).
+        profile.role === "manager" ? profile.id : undefined
       );
     } catch (err) {
       // Log but don't crash — render empty state in the dashboard

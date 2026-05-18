@@ -10,7 +10,7 @@
  * onApprove / onReject / onRevise so the orchestrator can refresh counts.
  */
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import { CheckCircle2, XCircle, RefreshCw, CalendarDays, Target } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +40,7 @@ interface GoalReviewCardProps {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function GoalReviewCard({
+export const GoalReviewCard = memo(function GoalReviewCard({
   goal,
   employeeName,
   onApprove,
@@ -212,4 +212,4 @@ export function GoalReviewCard({
     />
     </>
   );
-}
+});

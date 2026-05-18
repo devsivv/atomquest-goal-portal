@@ -148,63 +148,6 @@ export function ManagerApprovalDashboard({
     setModalAction(null);
   }
 
-  // ─── Single-goal confirmation ─────────────────────────────────────────────
-
-  const handleConfirm = useCallback(
-    async (goalId: string, action: ApprovalAction, reason?: string) => {
-      startTransition(async () => {
-        try {
-          if (action === "approve") {
-            const res = await approveGoalAction(goalId);
-            if (!res.success) throw new Error(res.error);
-
-            const targetGoal = groups
-              .flatMap((g) => g.goals)
-              .find((g) => g.id === goalId);
-
-            if (targetGoal) {
-              applyOptimisticGoalUpdate({
-                ...targetGoal,
-                status: "approved",
-                approved_by: managerId,
-                approved_at: new Date().toISOString(),
-                is_locked: true,
-              } as NormalizedGoal);
-            }
-
-            showToast.success({ title: "Goal approved and locked successfully." });
-          } else if (action === "reject") {
-            const res = await rejectGoalAction(
-              goalId,
-              managerId,
-              reason ?? "No reason provided."
-            );
-            if (!res.success) throw new Error(res.error);
-            applyOptimisticGoalUpdate(res.updated!);
-            showToast.info({ title: "Goal rejected. Employee will be notified." });
-          } else {
-            const res = await requestRevisionAction(
-              goalId,
-              managerId,
-              reason ?? "Please revise your goal."
-            );
-            if (!res.success) throw new Error(res.error);
-            applyOptimisticGoalUpdate(res.updated!);
-            showToast.success({ title: "Revision requested." });
-          }
-
-          closeModal();
-        } catch (error) {
-          console.error(error);
-          showToast.error({
-            title: error instanceof Error ? error.message : "Action failed. Please retry.",
-          });
-        }
-      });
-    },
-    [groups, managerId, applyOptimisticGoalUpdate]
-  );
-
   // ─── Bulk approval ────────────────────────────────────────────────────────
 
   const handleApproveAll = useCallback(
@@ -384,7 +327,7 @@ export function ManagerApprovalDashboard({
         action={modalAction}
         goal={modalGoal}
         onClose={closeModal}
-        onConfirm={handleConfirm}
+        onSuccess={applyOptimisticGoalUpdate}
       />
     </div>
   );

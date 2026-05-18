@@ -23,15 +23,16 @@ export const managerService = {
 
   async getTeamSubmittedGoals(
     client: SupabaseClient,
-    cycleId: string
+    cycleId: string,
+    managerId?: string
   ): Promise<TeamMemberGoalGroup[]> {
-    const { data: goals, error: goalsError } = await client
+    const query = client
       .from("goals")
       .select(
         `
         *,
         profiles:profile_id (
-          id, full_name, employee_id, department, designation, avatar_url
+          id, full_name, employee_id, department, designation, avatar_url, manager_id
         )
       `
       )
@@ -46,6 +47,8 @@ export const managerService = {
       .is("deleted_at", null)
       .order("submitted_at", { ascending: true });
 
+    const { data: goals, error: goalsError } = await query;
+
     if (goalsError) throw new Error(goalsError.message);
     if (!goals || goals.length === 0) return [];
 
@@ -59,9 +62,15 @@ export const managerService = {
         department: string;
         designation: string;
         avatar_url: string | null;
+        manager_id: string | null;
       } | null;
 
       if (!profile) continue;
+
+      // ── Manager hierarchy filter ───────────────────────────────────────────
+      // When a managerId is provided, only include goals from direct reports
+      // (employees whose profiles.manager_id matches the current manager).
+      if (managerId && profile.manager_id !== managerId) continue;
 
       const profileId = profile.id;
 
@@ -100,6 +109,25 @@ export const managerService = {
           g.status === "completed"
       ),
     }));
+  },
+
+  /**
+   * Fetch all direct reports (employees) for a given manager.
+   * Returns lightweight profile stubs — no goal data.
+   */
+  async getDirectReports(
+    client: SupabaseClient,
+    managerId: string
+  ): Promise<{ id: string; full_name: string; employee_id: string; department: string; designation: string; avatar_url: string | null }[]> {
+    const { data, error } = await client
+      .from("profiles")
+      .select("id, full_name, employee_id, department, designation, avatar_url")
+      .eq("manager_id", managerId)
+      .eq("is_active", true)
+      .order("full_name", { ascending: true });
+
+    if (error) throw new Error(error.message);
+    return data ?? [];
   },
 
   async getGoalTimeline(

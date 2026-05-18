@@ -7,6 +7,7 @@
  * Pure presentation — receives data from the Dashboard orchestrator.
  */
 
+import { memo } from "react";
 import { Users, Clock, CheckCircle2, XCircle } from "lucide-react";
 import type { ManagerDashboardStats } from "../types/manager.types";
 
@@ -22,7 +23,7 @@ interface StatCardProps {
   bgClass: string;
 }
 
-function StatCard({ label, value, icon: Icon, colorClass, bgClass }: StatCardProps) {
+const StatCard = memo(function StatCard({ label, value, icon: Icon, colorClass, bgClass }: StatCardProps) {
   return (
     <div className="relative overflow-hidden rounded-xl border bg-card p-5 shadow-sm transition-all duration-300 ease-out hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20">
       <div className="flex items-start justify-between">
@@ -40,9 +41,9 @@ function StatCard({ label, value, icon: Icon, colorClass, bgClass }: StatCardPro
       </div>
     </div>
   );
-}
+});
 
-export function ManagerStatsBanner({ stats }: ManagerStatsBannerProps) {
+export const ManagerStatsBanner = memo(function ManagerStatsBanner({ stats }: ManagerStatsBannerProps) {
   const statCards: StatCardProps[] = [
     {
       label: "Team Members",
@@ -81,4 +82,4 @@ export function ManagerStatsBanner({ stats }: ManagerStatsBannerProps) {
       ))}
     </div>
   );
-}
+});

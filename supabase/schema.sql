@@ -773,3 +773,96 @@ VALUES
   ('Q3 FY2025-26', 'quarterly', '2025-10-01', '2025-12-31', 'planning', FALSE),
   ('Q4 FY2025-26', 'quarterly', '2026-01-01', '2026-03-31', 'planning', FALSE)
 ON CONFLICT (name) DO NOTHING;
+
+-- ============================================================
+-- SECTION 8: NOTIFICATIONS
+-- ============================================================
+
+CREATE TABLE notifications (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  type            TEXT NOT NULL,
+  title           TEXT NOT NULL,
+  description     TEXT,
+  href            TEXT NOT NULL,
+  is_read         BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX idx_notifications_profile_id ON notifications (profile_id);
+CREATE INDEX idx_notifications_is_read ON notifications (is_read);
+
+ALTER TABLE notifications ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "notifications_select_own"
+  ON notifications FOR SELECT
+  USING (profile_id = auth.uid());
+
+CREATE POLICY "notifications_update_own"
+  ON notifications FOR UPDATE
+  USING (profile_id = auth.uid());
+
+CREATE POLICY "notifications_insert_all"
+  ON notifications FOR INSERT
+  WITH CHECK (TRUE);
+
+-- ------------------------------------------------------------
+-- Notification Triggers
+-- ------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION fn_trigger_goal_notifications()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER AS $$
+DECLARE
+  v_manager_id UUID;
+BEGIN
+  -- Get the manager of the employee who owns the goal
+  SELECT manager_id INTO v_manager_id
+  FROM profiles
+  WHERE id = NEW.profile_id;
+
+  -- 1. Goal Submitted -> Notify Manager
+  IF NEW.status = 'submitted' AND OLD.status = 'draft' THEN
+    IF v_manager_id IS NOT NULL THEN
+      INSERT INTO notifications (profile_id, type, title, description, href)
+      VALUES (
+        v_manager_id,
+        'goal_submitted',
+        'Goal Approval Required',
+        'A new goal "' || NEW.title || '" was submitted for your review.',
+        '/manager'
+      );
+    END IF;
+  END IF;
+
+  -- 2. Goal Approved -> Notify Employee
+  IF NEW.status = 'approved' AND OLD.status != 'approved' THEN
+    INSERT INTO notifications (profile_id, type, title, description, href)
+    VALUES (
+      NEW.profile_id,
+      'goal_approved',
+      'Goal Approved',
+      'Your goal "' || NEW.title || '" has been approved and locked.',
+      '/employee/plan'
+    );
+  END IF;
+
+  -- 3. Revision Requested -> Notify Employee
+  IF NEW.status = 'revision_requested' AND OLD.status != 'revision_requested' THEN
+    INSERT INTO notifications (profile_id, type, title, description, href)
+    VALUES (
+      NEW.profile_id,
+      'revision_requested',
+      'Revision Requested',
+      'Your manager requested revisions for "' || NEW.title || '".',
+      '/employee/plan'
+    );
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER trg_goal_notifications
+  AFTER UPDATE ON goals
+  FOR EACH ROW EXECUTE FUNCTION fn_trigger_goal_notifications();
+

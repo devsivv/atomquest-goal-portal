@@ -120,9 +120,8 @@ function detectMode(goals: NormalizedGoal[]): GoalMode {
   if (relational.length > 0) {
     const statuses = relational.map((g) => g.status);
     if (statuses.some((s) => s === "approved"))                          return "approved";
-    if (statuses.some((s) => s === "revision_requested"))                return "revision";
+    if (statuses.some((s) => s === "revision_requested" || s === "rejected")) return "revision";
     if (statuses.some((s) => s === "submitted" || s === "under_review")) return "submitted";
-    if (statuses.some((s) => s === "rejected"))                          return "rejected";
   }
 
   // Fall back to draft anchor only when no relational rows exist
@@ -155,6 +154,8 @@ function buildOptimisticGoals(
     submitted_at:       now,
     approved_by:        null,
     approved_at:        null,
+    review_comment:     null,
+    is_draft:           false,
     rejected_reason:    null,
     is_locked:          false,
     is_shared:          false,
@@ -181,6 +182,7 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
   const [fetchedGoals, setFetchedGoals] = useState<NormalizedGoal[]>([]);
   const [autosaveStatus, setAutosaveStatus] = useState<AutosaveState>("idle");
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null);
+  const [isDraftResumed, setIsDraftResumed] = useState(false);
   const [isSubmitting, startSubmitTransition] = useTransition();
 
   // Rollback refs — hold the pre-submit snapshot so failure can restore state
@@ -215,9 +217,8 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
         setMode(detected);
 
         if (detected === "drafting") {
-          const anchor    = goals.find((g) => g.draft_content !== null);
-          const drafts    = (anchor?.draft_content as unknown as GoalDraftPayload[]) ?? [];
-          reset({ goals: drafts });
+          // Do not auto-hydrate drafts; wait for explicit "Resume Draft" interaction
+          setIsDraftResumed(false);
         } else if (detected === "revision") {
           reset({ goals: goalsToDraftPayload(goals) });
         }
@@ -366,6 +367,11 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
   const isEditable      = isModeEditable(mode);
   const canSubmit       = isEditable && watchedGoals.length > 0 && totalWeightage === 100 && !isSubmitting;
 
+  const anchor = fetchedGoals.find((g) => g.draft_content !== null);
+  const draftsFromDb = (anchor?.draft_content as unknown as GoalDraftPayload[]) ?? [];
+  const hasDbDrafts = draftsFromDb.length > 0;
+  const dbDraftsWeightage = draftsFromDb.reduce((s, g) => s + (Number(g.weightage) || 0), 0);
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   if (mode === "loading") return <GoalCreationSkeleton />;
@@ -394,10 +400,50 @@ export function GoalCreationDashboard({ profileId, cycleId }: GoalCreationDashbo
     );
   }
 
+
   // Editable modes: "empty" | "drafting" | "revision"
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-24">
       <PageHeader autosaveStatus={autosaveStatus} lastSavedAt={lastSavedAt} />
+
+      {mode === "drafting" && hasDbDrafts && !isDraftResumed && (
+        <div className="flex items-center gap-4 rounded-xl border border-amber-200/60 bg-amber-50/40 px-5 py-4 dark:border-amber-900/30 dark:bg-amber-950/10 animate-in fade-in duration-300">
+          <div className="flex items-center justify-center h-10 w-10 rounded-full bg-amber-500/10 shrink-0">
+            <PenLine className="h-5 w-5 text-amber-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-base font-semibold text-amber-800 dark:text-amber-300">Draft In Progress</span>
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">Draft</span>
+            </div>
+            <p className="mt-0.5 text-sm text-amber-600 dark:text-amber-400">
+              You have {draftsFromDb.length} saved goal{draftsFromDb.length !== 1 ? "s" : ""} · {dbDraftsWeightage}% allocated
+            </p>
+          </div>
+          <Button
+            type="button"
+            onClick={() => {
+              reset({ goals: draftsFromDb });
+              setIsDraftResumed(true);
+            }}
+            className="shrink-0 bg-amber-500 hover:bg-amber-600 text-white shadow-sm"
+          >
+            Resume Draft
+          </Button>
+        </div>
+      )}
+
+      {mode === "drafting" && isDraftResumed && watchedGoals.length > 0 && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-amber-200/60 bg-amber-50/40 px-5 py-3 dark:border-amber-900/30 dark:bg-amber-950/10 animate-in fade-in duration-300">
+          <PenLine className="h-4 w-4 shrink-0 text-amber-500" />
+          <div className="flex-1 min-w-0">
+            <span className="text-sm font-medium text-amber-800 dark:text-amber-300">Draft Resumed</span>
+            <span className="ml-2 text-xs text-amber-600 dark:text-amber-400">
+              {watchedGoals.length} goal{watchedGoals.length !== 1 ? "s" : ""} · {totalWeightage}% allocated
+            </span>
+          </div>
+        </div>
+      )}
 
       {mode === "revision" && (
         <div className="rounded-xl border border-violet-200 bg-violet-50 px-5 py-4 dark:border-violet-800/40 dark:bg-violet-900/10">

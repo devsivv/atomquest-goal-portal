@@ -56,8 +56,10 @@ export const goalsService = {
       .in("status", [
         "draft",
         "submitted",
+        "under_review",
         "approved",
-        "revision_requested"
+        "revision_requested",
+        "rejected"
       ])
       .order("created_at", {
         ascending: true

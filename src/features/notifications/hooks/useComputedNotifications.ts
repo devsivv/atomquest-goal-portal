@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-
-export type AppNotification = {
-  id: string;
-  type: "goal_approval" | "checkin_submitted" | "manager_ack" | "review_reminder";
-  title: string;
-  description: string;
-  href: string;
-  createdAt: string;
-  read: boolean;
-};
+import { AppNotification } from "../services/notifications.service";
 
 export function useComputedNotifications(profileId: string, role: string) {
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -20,129 +11,102 @@ export function useComputedNotifications(profileId: string, role: string) {
     let mounted = true;
 
     async function fetchNotifications() {
-      if (!profileId) return;
-
       try {
-        const items: AppNotification[] = [];
+        const { data, error } = await client
+          .from("notifications")
+          .select("*")
+          .eq("profile_id", profileId)
+          .order("created_at", { ascending: false })
+          .limit(20);
 
-        if (role === "manager") {
-          // 1. Goal Approval Pending (from employees they manage)
-          const { data: pendingGoals } = await client
-            .from("goals")
-            .select("id, title, created_at, profiles!inner(id, manager_id, full_name)")
-            .eq("status", "submitted")
-            .eq("profiles.manager_id", profileId);
+        if (error) throw error;
 
-          if (pendingGoals) {
-            pendingGoals.forEach((g: any) => {
-              items.push({
-                id: `goal-${g.id}`,
-                type: "goal_approval",
-                title: "Goal Approval Pending",
-                description: `${g.profiles.full_name} submitted "${g.title}" for review.`,
-                href: "/manager",
-                createdAt: g.created_at,
-                read: false,
-              });
-            });
-          }
-
-          // 2. Quarterly check-ins submitted
-          const { data: pendingCheckins } = await client
-            .from("quarterly_checkins")
-            .select("id, quarter, created_at, profiles!inner(id, manager_id, full_name)")
-            .eq("checkin_status", "submitted")
-            .eq("profiles.manager_id", profileId);
-
-          if (pendingCheckins) {
-            pendingCheckins.forEach((c: any) => {
-              items.push({
-                id: `checkin-${c.id}`,
-                type: "checkin_submitted",
-                title: "Quarterly Check-in Submitted",
-                description: `${c.profiles.full_name} submitted their ${c.quarter} check-in.`,
-                href: "/manager",
-                createdAt: c.created_at,
-                read: false,
-              });
-            });
-          }
-        } else {
-          // Employee
-          // 1. Revisions requested
-          const { data: revisedGoals } = await client
-            .from("goals")
-            .select("id, title, updated_at")
-            .eq("profile_id", profileId)
-            .eq("status", "revision_requested");
-
-          if (revisedGoals) {
-            revisedGoals.forEach((g: any) => {
-              items.push({
-                id: `goal-${g.id}`,
-                type: "review_reminder",
-                title: "Revision Requested",
-                description: `Your manager requested revisions for "${g.title}".`,
-                href: "/employee/plan",
-                createdAt: g.updated_at,
-                read: false,
-              });
-            });
-          }
-
-          // 2. Acknowledged check-ins (limit to recent to avoid clutter)
-          const { data: ackCheckins } = await client
-            .from("quarterly_checkins")
-            .select("id, quarter, acknowledged_at")
-            .eq("employee_id", profileId)
-            .eq("checkin_status", "acknowledged")
-            .not("acknowledged_at", "is", null)
-            .order("acknowledged_at", { ascending: false })
-            .limit(3);
-
-          if (ackCheckins) {
-            ackCheckins.forEach((c: any) => {
-              items.push({
-                id: `checkin-${c.id}`,
-                type: "manager_ack",
-                title: "Check-in Acknowledged",
-                description: `Your manager acknowledged your ${c.quarter} check-in.`,
-                href: "/employee/tracking",
-                createdAt: c.acknowledged_at,
-                read: false,
-              });
-            });
-          }
+        if (mounted && data) {
+          setNotifications(data as AppNotification[]);
         }
-
-        // Sort by date desc
-        items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-        if (mounted) {
-          setNotifications(items);
+      } catch (err: any) {
+        // If the notifications table doesn't exist yet (42P01) or RLS blocks it,
+        // degrade gracefully without spamming the console.
+        if (err?.code === '42P01' || err?.code === 'PGRST116') {
+          if (mounted) setNotifications([]);
+          return;
         }
-      } catch (err) {
-        console.error("Failed to fetch computed notifications:", err);
+        console.error("Failed to fetch notifications:", err?.message || err);
       } finally {
         if (mounted) setLoading(false);
       }
     }
 
+    if (!profileId) {
+      if (mounted) setLoading(false);
+      return;
+    }
+
     fetchNotifications();
+
+    // Use a unique channel name to prevent Strict Mode remount collisions
+    // which cause "cannot add postgres_changes callbacks after subscribe" errors.
+    const channelName = `notifications:${profileId}-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    
+    const subscription = client
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "notifications",
+          filter: `profile_id=eq.${profileId}`,
+        },
+        (payload) => {
+          if (mounted) {
+            setNotifications((prev) => [payload.new as AppNotification, ...prev]);
+          }
+        }
+      )
+      .subscribe();
 
     return () => {
       mounted = false;
+      client.removeChannel(subscription);
     };
-  }, [profileId, role, client]);
+  }, [profileId, client]);
 
-  // Optimistic mark as read
-  const markAsRead = (id: string) => {
-    setNotifications((prev) => prev.filter(n => n.id !== id));
+  const markAsRead = async (id: string) => {
+    // Optimistic UI update
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, is_read: true } : n))
+    );
+
+    try {
+      await client
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("id", id);
+    } catch (err: any) {
+      if (err?.code !== '42P01') {
+        console.error("Failed to mark as read:", err?.message || err);
+      }
+    }
   };
 
-  const markAllAsRead = () => {
-    setNotifications([]);
+  const markAllAsRead = async () => {
+    // Optimistic UI update
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+
+    try {
+      await client
+        .from("notifications")
+        .update({ is_read: true })
+        .eq("profile_id", profileId)
+        .eq("is_read", false);
+    } catch (err: any) {
+      if (err?.code !== '42P01') {
+        console.error("Failed to mark all as read:", err?.message || err);
+      }
+    }
   };
 
   return { notifications, loading, markAsRead, markAllAsRead };
 }
+

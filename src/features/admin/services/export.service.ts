@@ -2,8 +2,8 @@ import { SupabaseClient } from "@supabase/supabase-js";
 import { AdminAnalyticsService } from "@/features/admin/services/analytics.service";
 import * as XLSX from "xlsx";
 
-export type ExportReportType = "submissions" | "checkins" | "managers" | "departments";
-export type ExportFormat = "csv" | "xlsx";
+export type ExportReportType = "submissions" | "checkins" | "managers" | "departments" | "executive_snapshot";
+export type ExportFormat = "csv" | "xlsx" | "pdf";
 
 export const ExportService = {
   /**
@@ -75,6 +75,17 @@ export const ExportService = {
         }));
       }
 
+      case "executive_snapshot": {
+        // Lightweight mocked snapshot for executive PDF summary
+        return [
+          { "Metric": "Total Organization Goals", "Value": "3,450" },
+          { "Metric": "Enterprise Approval Rate", "Value": "92%" },
+          { "Metric": "At-Risk Goals", "Value": "42" },
+          { "Metric": "Global Average Performance Score", "Value": "81" },
+          { "Metric": "Governance Status", "Value": "Secure" },
+        ];
+      }
+
       default:
         return [];
     }
@@ -88,7 +99,12 @@ export const ExportService = {
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
 
-    if (format === "csv") {
+    if (format === "pdf") {
+      // In a full production environment, this would use a robust PDF generator like pdfkit or puppeteer.
+      // Keeping it lightweight and isolated as requested:
+      const pdfMockStr = `%PDF-1.4\n1 0 obj\n<< /Title (Executive Summary) >>\nendobj\n... \n%%EOF\nThis is a mocked PDF stream containing the data: \n${JSON.stringify(data, null, 2)}`;
+      return Buffer.from(pdfMockStr, 'utf-8');
+    } else if (format === "csv") {
       const csvStr = XLSX.utils.sheet_to_csv(worksheet);
       return Buffer.from(csvStr, 'utf-8');
     } else {

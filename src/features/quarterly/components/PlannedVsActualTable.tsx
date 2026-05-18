@@ -1,25 +1,29 @@
+import { memo } from "react";
 import { QuarterlyGoalState } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Target } from "lucide-react";
 
-export function PlannedVsActualTable({ goals }: { goals: QuarterlyGoalState[] }) {
+export const PlannedVsActualTable = memo(function PlannedVsActualTable({ goals }: { goals: QuarterlyGoalState[] }) {
   return (
     <div className="rounded-md border overflow-hidden shadow-sm">
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 border-b text-muted-foreground">
             <tr>
-              <th className="p-4 text-left font-medium">Goal Objective</th>
-              <th className="p-4 text-center font-medium w-24">Weightage</th>
-              <th className="p-4 text-center font-medium w-32">Status</th>
-              <th className="p-4 text-center font-medium w-32">Progress</th>
+              <th className="p-4 text-left font-medium text-xs uppercase tracking-wider text-muted-foreground">Goal Objective</th>
+              <th className="p-4 text-center font-medium text-xs uppercase tracking-wider text-muted-foreground w-24 hidden sm:table-cell">Weightage</th>
+              <th className="p-4 text-center font-medium text-xs uppercase tracking-wider text-muted-foreground w-32">Status</th>
+              <th className="p-4 text-center font-medium text-xs uppercase tracking-wider text-muted-foreground w-32">Progress</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border bg-card">
             {goals.map(g => (
-              <tr key={g.goalId} className="hover:bg-muted/30 transition-colors">
-                <td className="p-4 font-medium">{g.title}</td>
-                <td className="p-4 text-center">{g.weightage}%</td>
+              <tr key={g.goalId} className="hover:bg-slate-50 dark:hover:bg-slate-900/50 transition-colors group">
+                <td className="p-4 font-medium text-slate-800 dark:text-slate-200">
+                  <div className="line-clamp-2">{g.title}</div>
+                  <div className="sm:hidden text-xs text-muted-foreground mt-1">{g.weightage}% Weight</div>
+                </td>
+                <td className="p-4 text-center text-muted-foreground hidden sm:table-cell">{g.weightage}%</td>
                 <td className="p-4 text-center">
                   <Badge 
                     variant={
@@ -57,4 +61,4 @@ export function PlannedVsActualTable({ goals }: { goals: QuarterlyGoalState[] })
       </div>
     </div>
   );
-}
+});

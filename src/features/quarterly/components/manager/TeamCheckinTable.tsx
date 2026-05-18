@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { NormalizedGoal, QuarterlyCheckin, QuarterlyGoalUpdate } from "@/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ interface TeamCheckinTableProps {
   onReviewClick: (goal: NormalizedGoal, checkin: QuarterlyCheckin, update: QuarterlyGoalUpdate | null) => void;
 }
 
-export function TeamCheckinTable({ goals, checkins, updates, onReviewClick }: TeamCheckinTableProps) {
+export const TeamCheckinTable = memo(function TeamCheckinTable({ goals, checkins, updates, onReviewClick }: TeamCheckinTableProps) {
   if (goals.length === 0) {
     return (
       <div className="py-12 px-6 text-center border-2 border-dashed rounded-xl bg-muted/20 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -109,4 +110,4 @@ export function TeamCheckinTable({ goals, checkins, updates, onReviewClick }: Te
       </table>
     </div>
   );
-}
+});

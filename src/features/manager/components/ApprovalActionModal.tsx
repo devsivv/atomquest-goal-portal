@@ -27,6 +27,7 @@ import {
   RefreshCw,
   Loader2,
   MessageSquare,
+  Sparkles,
 } from "lucide-react";
 import { reviewGoalAction } from "@/features/goals/actions/goals.actions";
 import type { NormalizedGoal } from "@/types";
@@ -316,10 +317,31 @@ export function ApprovalActionModal({
           <div className="space-y-1.5">
             <Label
               htmlFor="action-comment"
-              className="text-sm font-medium flex items-center gap-1.5"
+              className="text-sm font-medium flex items-center justify-between"
             >
-              <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
-              {config.commentLabel}
+              <span className="flex items-center gap-1.5">
+                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground" />
+                {config.commentLabel}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-[10px] text-indigo-600 dark:text-indigo-400 gap-1 uppercase tracking-wider hover:bg-indigo-50 px-2"
+                disabled={isPending}
+                onClick={() => {
+                  if (activeAction === "approve") {
+                    setComment("Excellent goal formulation. The targets are measurable and perfectly aligned with our Q3 enterprise strategy. Approved.");
+                  } else if (activeAction === "request_revision") {
+                    setComment("The core objective is solid, but we need tighter KPIs. Please revise the target value to reflect our 15% minimum growth baseline.");
+                  } else {
+                    setComment("This objective does not align with our current quarterly focus. Let's discuss an alternative approach in our 1:1.");
+                  }
+                }}
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Suggest
+              </Button>
             </Label>
             <Textarea
               id="action-comment"

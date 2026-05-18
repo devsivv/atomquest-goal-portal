@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TeamCompletionCardProps {
@@ -6,7 +7,7 @@ interface TeamCompletionCardProps {
   subtext: string;
 }
 
-export function TeamCompletionCard({ title, value, subtext }: TeamCompletionCardProps) {
+export const TeamCompletionCard = memo(function TeamCompletionCard({ title, value, subtext }: TeamCompletionCardProps) {
   return (
     <Card className="shadow-sm border-border transition-all duration-300 ease-out hover:shadow-md hover:-translate-y-0.5 hover:border-primary/20">
       <CardHeader className="pb-2">
@@ -18,4 +19,4 @@ export function TeamCompletionCard({ title, value, subtext }: TeamCompletionCard
       </CardContent>
     </Card>
   );
-}
+});

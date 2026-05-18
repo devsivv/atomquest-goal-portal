@@ -15,14 +15,14 @@ export function DashboardHeaderSkeleton() {
 
 export function MetricCardSkeleton() {
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="flex flex-row items-center justify-between pb-2 bg-muted/10">
-        <Skeleton className="h-5 w-1/2" />
-        <Skeleton className="h-4 w-4 rounded-full" />
+    <Card className="overflow-hidden border-slate-100 dark:border-slate-800">
+      <CardHeader className="flex flex-row items-center justify-between pb-2 bg-slate-50/50 dark:bg-slate-900/20">
+        <Skeleton className="h-5 w-1/2 opacity-70" />
+        <Skeleton className="h-4 w-4 rounded-full opacity-50" />
       </CardHeader>
       <CardContent className="pt-4">
-        <Skeleton className="h-8 w-1/3 mb-2" />
-        <Skeleton className="h-3 w-2/3" />
+        <Skeleton className="h-8 w-1/3 mb-2 opacity-80" />
+        <Skeleton className="h-3 w-2/3 opacity-40" />
       </CardContent>
     </Card>
   );

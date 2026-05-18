@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FormField, FormItem, FormLabel, FormControl, FormMessage } from "@/components/ui/form";
-import { Trash2, Lock } from "lucide-react";
+import { Trash2, Lock, Sparkles } from "lucide-react";
 import { UOM_LABELS } from "@/features/goals/utils/uom";
 import type { GoalDraftPayload } from "@/types/goals";
 
@@ -88,7 +88,34 @@ export function GoalFormRow({ index, onRemove, disabled = false }: GoalFormRowPr
           name={`goals.${index}.description`}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Description (Optional)</FormLabel>
+              <div className="flex items-center justify-between">
+                <FormLabel>Description (Optional)</FormLabel>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-indigo-600 dark:text-indigo-400 gap-1.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 px-2"
+                  disabled={disabled || !watch(`goals.${index}.title`)}
+                  onClick={() => {
+                    const title = watch(`goals.${index}.title`);
+                    const thrust = watch(`goals.${index}.thrust_area`) || "this area";
+                    const suggestion = `Achieve measurable outcomes in ${thrust} by tracking key performance indicators related to "${title || 'the objective'}". This includes establishing clear milestones, optimizing current workflows by 15%, and ensuring cross-functional alignment.`;
+                    // @ts-ignore - bypassing strict type checking for mock injection
+                    control._formValues.goals[index].description = suggestion;
+                    // Trigger re-render by setting a value that watch will pick up, 
+                    // or ideally use setValue from useFormContext if we extract it.
+                    // But we can just use the DOM for a lightweight UI mock:
+                    const el = document.querySelector(`textarea[name="goals.${index}.description"]`) as HTMLTextAreaElement;
+                    if(el) {
+                      el.value = suggestion;
+                      el.dispatchEvent(new Event('input', { bubbles: true }));
+                    }
+                  }}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Smart Suggest
+                </Button>
+              </div>
               <FormControl>
                 <Textarea 
                   placeholder="Describe the objective and key deliverables..." 

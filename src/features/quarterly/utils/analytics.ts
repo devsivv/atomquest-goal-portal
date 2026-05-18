@@ -2,12 +2,15 @@ import { NormalizedGoal, QuarterlyCheckin } from "@/types";
 import { determineGoalHealth } from "./health";
 import { generateManagerInsights, ManagerInsight } from "./insights";
 import { generateManagerAlerts, ManagerAlert } from "./alerts";
+import { calculateEmployeeScore, generatePerformanceDistribution, EmployeeScore } from "./scoring";
 
 export interface AnalyticsData {
   healthDistribution: { name: string; value: number; fill: string }[];
   categoryPerformance: { category: string; averageProgress: number }[];
-  teamCompletion: { employeeName: string; averageProgress: number }[];
+  teamCompletion: { employeeName: string; averageProgress: number; score: number; grade: string }[];
   quarterlyTrends: { quarter: string; averageProgress: number }[];
+  performanceDistribution: { grade: string; count: number; fill: string }[];
+  averageScore: number;
   insights: ManagerInsight[];
   alerts: ManagerAlert[];
   rawGoals: NormalizedGoal[];
@@ -91,10 +94,24 @@ export function generateManagerAnalytics(
     employeeMap[empId].count++;
   });
 
-  const teamCompletion = Object.keys(employeeMap).map(empId => ({
-    employeeName: profilesMap[empId] || "Unknown",
-    averageProgress: Math.round(employeeMap[empId].totalProgress / employeeMap[empId].count)
-  })).sort((a, b) => b.averageProgress - a.averageProgress);
+  const employeeScores: EmployeeScore[] = [];
+
+  const teamCompletion = Object.keys(employeeMap).map(empId => {
+    const scoreData = calculateEmployeeScore(goals, checkins, empId, profilesMap[empId] || "Unknown");
+    employeeScores.push(scoreData);
+    
+    return {
+      employeeName: profilesMap[empId] || "Unknown",
+      averageProgress: Math.round(employeeMap[empId].totalProgress / employeeMap[empId].count),
+      score: scoreData.score,
+      grade: scoreData.grade
+    };
+  }).sort((a, b) => b.score - a.score);
+
+  const performanceDistribution = generatePerformanceDistribution(employeeScores);
+  const averageScore = employeeScores.length > 0 
+    ? Math.round(employeeScores.reduce((acc, curr) => acc + curr.score, 0) / employeeScores.length)
+    : 0;
 
   // 4. Quarterly Progress Trends
   // Aggregation Logic: Loops through all historical check-ins across all quarters (Q1, Q2, Q3, Q4).
@@ -125,6 +142,8 @@ export function generateManagerAnalytics(
     categoryPerformance,
     teamCompletion,
     quarterlyTrends,
+    performanceDistribution,
+    averageScore,
     insights,
     alerts,
     rawGoals: goals,

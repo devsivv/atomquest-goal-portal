@@ -7,8 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  ShieldAlert, Unlock, Search, History, AlertCircle, FileKey2 
+  ShieldAlert, Unlock, Search, History, AlertCircle, FileKey2, 
+  Settings2, Activity, Target, ShieldCheck, Clock, Lock, PlayCircle 
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Progress } from "@/components/ui/progress";
 import { AuditLogRecord } from "@/types/audit";
 import { format, formatDistanceToNow } from "date-fns";
 import { unlockGoalAction } from "@/features/admin/actions/audit.actions";
@@ -23,12 +28,21 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
+interface GovernanceStats {
+  submissionRate: number;
+  approvalRate: number;
+  lockedGoals: number;
+  pendingReviews: number;
+  cycleStatus: "planning" | "active" | "review" | "closed";
+}
+
 interface Props {
   auditLogs: AuditLogRecord[];
   lockedGoals: any[];
+  stats?: GovernanceStats;
 }
 
-export function GovernanceDashboard({ auditLogs, lockedGoals }: Props) {
+export function GovernanceDashboard({ auditLogs, lockedGoals, stats }: Props) {
   const [logSearch, setLogSearch] = useState("");
   const [goalSearch, setGoalSearch] = useState("");
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -85,12 +99,159 @@ export function GovernanceDashboard({ auditLogs, lockedGoals }: Props) {
     INSERT: "bg-muted text-muted-foreground border-border",
   };
 
+  const [freezeSubmissions, setFreezeSubmissions] = useState(false);
+  const [reviewWindowOpen, setReviewWindowOpen] = useState(true);
+  const [cycleLocked, setCycleLocked] = useState(false);
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Governance & Security</h2>
+          <p className="text-muted-foreground">
+            Enterprise workflow controls, cycle management, and immutable audit logs.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 bg-muted/50 p-1.5 rounded-lg border">
+          <Label htmlFor="quarter-select" className="sr-only">Active Quarter</Label>
+          <Select defaultValue="q1-2026">
+            <SelectTrigger className="w-[140px] h-9 border-0 shadow-none bg-transparent font-medium">
+              <SelectValue placeholder="Select Cycle" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="q1-2026">Q1 FY2026</SelectItem>
+              <SelectItem value="q2-2026">Q2 FY2026</SelectItem>
+              <SelectItem value="q3-2026">Q3 FY2026</SelectItem>
+              <SelectItem value="q4-2026">Q4 FY2026</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Governance Control Cards */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card className="shadow-sm border-indigo-100 dark:border-indigo-900/50 hover:shadow-md transition-shadow">
+          <CardContent className="p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-indigo-700 dark:text-indigo-400 font-semibold">
+                <Lock className="h-4 w-4" /> Cycle Lock
+              </div>
+              <Switch 
+                checked={cycleLocked} 
+                onCheckedChange={setCycleLocked}
+                className="data-[state=checked]:bg-indigo-600"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Locking the cycle prevents all structural changes to goal definitions across the enterprise.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-emerald-100 dark:border-emerald-900/50 hover:shadow-md transition-shadow">
+          <CardContent className="p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold">
+                <ShieldCheck className="h-4 w-4" /> Freeze Submissions
+              </div>
+              <Switch 
+                checked={freezeSubmissions} 
+                onCheckedChange={setFreezeSubmissions}
+                className="data-[state=checked]:bg-emerald-600"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Halt new goal submissions and edits to force finalization of the current state.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm border-amber-100 dark:border-amber-900/50 hover:shadow-md transition-shadow">
+          <CardContent className="p-5 flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-amber-700 dark:text-amber-500 font-semibold">
+                <Settings2 className="h-4 w-4" /> Review Window
+              </div>
+              <Switch 
+                checked={reviewWindowOpen} 
+                onCheckedChange={setReviewWindowOpen}
+                className="data-[state=checked]:bg-amber-500"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground leading-snug">
+              Open the manager review window to allow approvals, rejections, and feedback.
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm hover:shadow-md transition-shadow bg-slate-50 dark:bg-slate-900/50">
+          <CardContent className="p-5 flex flex-col justify-center h-full">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold text-muted-foreground">Governance Status</span>
+              <Badge variant="outline" className="bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 uppercase text-[10px]">Secure</Badge>
+            </div>
+            <div className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+              <Activity className="h-3.5 w-3.5 text-blue-500" />
+              <span>{stats?.lockedGoals || 0} goals locked & secured</span>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Workflow Health Panels */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Target className="h-4 w-4 text-primary" /> Goal Submission Status
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-2xl font-bold">{stats?.submissionRate || 0}%</span>
+              <span className="text-xs text-muted-foreground">Enterprise wide</span>
+            </div>
+            <Progress value={stats?.submissionRate || 0} className="h-2" />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <ShieldAlert className="h-4 w-4 text-emerald-500" /> Approval Workflow Health
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-2xl font-bold text-emerald-600">{stats?.approvalRate || 0}%</span>
+              <span className="text-xs text-muted-foreground">Goals Approved</span>
+            </div>
+            <Progress value={stats?.approvalRate || 0} className="h-2 bg-emerald-100 dark:bg-emerald-950 [&>div]:bg-emerald-500" />
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-500" /> Review Completion
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline justify-between mb-2">
+              <span className="text-2xl font-bold text-amber-600">{stats?.pendingReviews || 0}</span>
+              <span className="text-xs text-muted-foreground">Pending Reviews</span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Managers have {stats?.pendingReviews || 0} goals waiting in queue.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Tabs defaultValue="audit">
-        <TabsList className="mb-4">
-          <TabsTrigger value="audit" className="gap-2"><History className="h-4 w-4" /> Audit Timeline</TabsTrigger>
-          <TabsTrigger value="unlocks" className="gap-2"><FileKey2 className="h-4 w-4" /> Goal Unlocks</TabsTrigger>
+        <TabsList className="mb-4 bg-muted/50">
+          <TabsTrigger value="audit" className="gap-2"><History className="h-4 w-4" /> Activity & Audit</TabsTrigger>
+          <TabsTrigger value="unlocks" className="gap-2"><FileKey2 className="h-4 w-4" /> Access Unlocks</TabsTrigger>
         </TabsList>
 
         <TabsContent value="audit" className="space-y-4 m-0">
