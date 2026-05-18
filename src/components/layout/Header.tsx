@@ -30,11 +30,21 @@ export function Header({ profile }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
 
-  // Basic title mapping based on pathname
+  // Title mapping based on pathname — covers all three workspaces
   const getPageTitle = () => {
+    // Admin workspace
+    if (pathname.includes("/admin/analytics")) return "Analytics";
+    if (pathname.includes("/admin/cycles")) return "Cycles";
+    if (pathname.includes("/admin/users")) return "Users";
+    if (pathname.includes("/admin/governance")) return "Governance";
+    if (pathname.includes("/admin/reports")) return "Reports";
+    if (pathname.includes("/admin/settings")) return "Settings";
+    if (pathname === "/admin") return "Admin Dashboard";
+    // Manager workspace
     if (pathname.includes("/manager/tracking")) return "Team Tracking";
     if (pathname.includes("/manager/analytics")) return "Analytics";
     if (pathname === "/manager") return "Review Dashboard";
+    // Employee workspace
     if (pathname.includes("/employee/plan")) return "Goals Planning";
     if (pathname.includes("/employee/tracking")) return "Quarterly Tracking";
     if (pathname === "/employee") return "Employee Dashboard";
@@ -42,6 +52,9 @@ export function Header({ profile }: HeaderProps) {
   };
 
   const getBreadcrumbRoot = () => {
+    if (pathname.startsWith("/admin")) {
+      return { label: "Admin Workspace", href: "/admin" };
+    }
     if (pathname.startsWith("/manager")) {
       return { label: "Manager Workspace", href: "/manager" };
     }

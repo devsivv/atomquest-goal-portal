@@ -21,19 +21,20 @@ export function Sidebar({ role, className, onNavigate, isCollapsed = false, onTo
   const pathname = usePathname();
 
   const navItems = useMemo(() => {
-    if (role === "admin") {
+    // admin and hr roles: Admin Workspace only
+    if (role === "admin" || role === "hr") {
       return [
         { label: "Admin Workspace", items: adminNavigation },
-        { label: "Manager Workspace", items: managerNavigation },
-        { label: "Employee Workspace", items: employeeNavigation },
       ];
     }
+    // manager: Manager + Employee workspaces
     if (role === "manager") {
       return [
         { label: "Manager Workspace", items: managerNavigation },
         { label: "Employee Workspace", items: employeeNavigation },
       ];
     }
+    // employee: Employee Workspace only
     return [{ label: "Employee Workspace", items: employeeNavigation }];
   }, [role]);
 
@@ -66,8 +67,9 @@ export function Sidebar({ role, className, onNavigate, isCollapsed = false, onTo
       
       <div className="flex-1 overflow-y-auto py-6 overflow-x-hidden">
         <nav className={cn("grid gap-8", isCollapsed ? "px-0" : "px-4")}>
-          {navItems.map((group, index) => (
-            <div key={index} className="flex flex-col gap-2">
+          {navItems.map((group) => (
+            // Stable string key — prevents React from reusing stale DOM nodes on role/route change
+            <div key={group.label} className="flex flex-col gap-2">
               {!isCollapsed && (
                 <h4 className="px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80 whitespace-nowrap overflow-hidden">
                   {group.label}
@@ -102,7 +104,7 @@ export function Sidebar({ role, className, onNavigate, isCollapsed = false, onTo
                   );
 
                   return isCollapsed ? (
-                    <Tooltip key={i} delayDuration={0}>
+                    <Tooltip key={item.href} delayDuration={0}>
                       <TooltipTrigger asChild>
                         {LinkContent}
                       </TooltipTrigger>
@@ -111,7 +113,7 @@ export function Sidebar({ role, className, onNavigate, isCollapsed = false, onTo
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    <div key={i}>{LinkContent}</div>
+                    <div key={item.href}>{LinkContent}</div>
                   );
                 })}
               </div>
