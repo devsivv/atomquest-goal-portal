@@ -376,9 +376,9 @@ atomquest-goal-portal/
 
 | Role | Email | Password |
 |---|---|---|
-| Employee | `employee@demo.quartiq.com` | `Demo@1234` |
-| Manager | `manager@demo.quartiq.com` | `Demo@1234` |
-| Admin / HR | `admin@demo.quartiq.com` | `Demo@1234` |
+| Employee | `employee101@test.com` | `Test@123` |
+| Manager | `manager101@test.com` | `Test@123` |
+| Admin / HR | `admin101@test.com` | `Test@123` |
 
 > All three roles are pre-seeded with realistic goal data, check-ins, and approval history.
 
